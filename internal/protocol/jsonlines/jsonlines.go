@@ -1,8 +1,10 @@
 package jsonlines
 
 import (
+	"bufio"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"sync"
@@ -65,28 +67,42 @@ func (l *Listener) Addr() string {
 type Conn struct {
 	conn    net.Conn
 	encoder *json.Encoder
-	decoder *json.Decoder
-	mu      sync.Mutex
+	scanner *bufio.Scanner
+	wmu     sync.Mutex
+	rmu     sync.Mutex
 }
 
+const maxMessageSize = 4 << 20 // 4 MB
+
 func newConn(conn net.Conn) *Conn {
+	s := bufio.NewScanner(conn)
+	s.Buffer(make([]byte, 64*1024), maxMessageSize)
 	return &Conn{
 		conn:    conn,
 		encoder: json.NewEncoder(conn),
-		decoder: json.NewDecoder(conn),
+		scanner: s,
 	}
 }
 
 func (c *Conn) Send(msg protocol.Message) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	c.wmu.Lock()
+	defer c.wmu.Unlock()
 
 	return c.encoder.Encode(msg)
 }
 
 func (c *Conn) Receive() (protocol.Message, error) {
+	c.rmu.Lock()
+	defer c.rmu.Unlock()
+
 	var msg protocol.Message
-	if err := c.decoder.Decode(&msg); err != nil {
+	if !c.scanner.Scan() {
+		if err := c.scanner.Err(); err != nil {
+			return msg, err
+		}
+		return msg, io.EOF
+	}
+	if err := json.Unmarshal(c.scanner.Bytes(), &msg); err != nil {
 		return msg, err
 	}
 	return msg, nil

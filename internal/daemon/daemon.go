@@ -212,29 +212,46 @@ func (d *Daemon) handleListItems(cc *clientConn, msg protocol.Message, itemType 
 		return
 	}
 
-	var allItems []provider.Item
-
 	repos := d.config.Repos
 	if payload.Repo != "" {
 		repos = []config.RepoConfig{{Name: payload.Repo}}
 	}
 
-	for _, r := range repos {
+	type result struct {
+		items []provider.Item
+	}
+
+	results := make([]result, len(repos))
+	var wg sync.WaitGroup
+
+	for i, r := range repos {
 		ref, err := provider.ParseRepoRef(r.Name)
 		if err != nil {
 			continue
 		}
-		var items []provider.Item
-		if itemType == provider.ItemTypeIssue {
-			items, err = d.provider.ListIssues(context.Background(), ref, provider.ListOptions{State: "open"})
-		} else {
-			items, err = d.provider.ListPRs(context.Background(), ref, provider.ListOptions{State: "open"})
-		}
-		if err != nil {
-			log.Printf("error listing %s for %s: %v", itemType, ref, err)
-			continue
-		}
-		allItems = append(allItems, items...)
+		wg.Add(1)
+		go func(idx int, ref provider.RepoRef) {
+			defer wg.Done()
+			var items []provider.Item
+			var fetchErr error
+			opts := provider.ListOptions{State: "open", Limit: payload.Limit}
+			if itemType == provider.ItemTypeIssue {
+				items, fetchErr = d.provider.ListIssues(context.Background(), ref, opts)
+			} else {
+				items, fetchErr = d.provider.ListPRs(context.Background(), ref, opts)
+			}
+			if fetchErr != nil {
+				log.Printf("error listing %s for %s: %v", itemType, ref, fetchErr)
+				return
+			}
+			results[idx] = result{items: items}
+		}(i, ref)
+	}
+	wg.Wait()
+
+	var allItems []provider.Item
+	for _, r := range results {
+		allItems = append(allItems, r.items...)
 	}
 
 	resp, _ := protocol.NewResponse(msg.ID, protocol.ItemsPayload{Items: allItems})

@@ -207,6 +207,21 @@ func TestDefault(t *testing.T) {
 	if cfg.ACP.Socket != "/tmp/ai-mux.sock" {
 		t.Errorf("expected default socket /tmp/ai-mux.sock, got %s", cfg.ACP.Socket)
 	}
+	if cfg.Dashboard.ItemsPerRepo != 3 {
+		t.Errorf("expected default items_per_repo 3, got %d", cfg.Dashboard.ItemsPerRepo)
+	}
+}
+
+func TestLoad_DashboardConfig(t *testing.T) {
+	content := "repos:\n  - name: o/r\n    path: /tmp/r\npoll_interval: 30s\ndashboard:\n  items_per_repo: 5"
+	path := writeTemp(t, content)
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Dashboard.ItemsPerRepo != 5 {
+		t.Errorf("expected items_per_repo 5, got %d", cfg.Dashboard.ItemsPerRepo)
+	}
 }
 
 func writeTemp(t *testing.T, content string) string {

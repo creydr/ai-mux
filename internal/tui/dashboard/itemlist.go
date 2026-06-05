@@ -3,35 +3,93 @@ package dashboard
 import (
 	"fmt"
 	"sort"
-	"strings"
 
 	"github.com/creydr/ai-mux/internal/provider"
 )
 
-func renderItemList(items []provider.Item, cursor int, width int) string {
-	if len(items) == 0 {
-		return statusBarStyle.Render("  No items")
-	}
+type visibleRow struct {
+	item       *provider.Item
+	expandRepo string
+	isHeader   bool
+	text       string
+}
 
+func buildVisibleRows(items []provider.Item, itemsPerRepo int, expanded map[string]bool, selectedRepo string, fullLoaded map[string]bool) []visibleRow {
 	grouped := groupByRepo(items)
+	var rows []visibleRow
 
-	var b strings.Builder
-	row := 0
 	for _, g := range grouped {
-		b.WriteString(repoHeaderStyle.Render("  " + g.repo))
-		b.WriteString("\n")
-		for _, item := range g.items {
-			line := formatItem(item, width)
-			if row == cursor {
-				b.WriteString(selectedItemStyle.Render(line))
-			} else {
-				b.WriteString(normalItemStyle.Render(line))
+		limit := len(g.items)
+		if selectedRepo == "" && !expanded[g.repo] && itemsPerRepo > 0 && limit > itemsPerRepo {
+			limit = itemsPerRepo
+		}
+		for i := 0; i < limit; i++ {
+			rows = append(rows, visibleRow{item: &g.items[i]})
+		}
+		showExpand := false
+		if selectedRepo == "" {
+			if !expanded[g.repo] {
+				if fullLoaded[g.repo] {
+					showExpand = limit < len(g.items)
+				} else {
+					showExpand = len(g.items) >= itemsPerRepo
+				}
+			} else if !fullLoaded[g.repo] {
+				showExpand = true
 			}
-			b.WriteString("\n")
-			row++
+		}
+		if showExpand {
+			rows = append(rows, visibleRow{expandRepo: g.repo})
 		}
 	}
-	return b.String()
+	return rows
+}
+
+func buildContentLines(items []provider.Item, cursor, width, itemsPerRepo int, expanded map[string]bool, selectedRepo string, fullLoaded map[string]bool) ([]string, int) {
+	rows := buildVisibleRows(items, itemsPerRepo, expanded, selectedRepo, fullLoaded)
+
+	var lines []string
+	cursorLine := 0
+	prevRepo := ""
+	rowIdx := 0
+
+	for _, r := range rows {
+		if r.item != nil {
+			repo := r.item.Repo.String()
+			if repo != prevRepo {
+				if prevRepo != "" {
+					lines = append(lines, "")
+				}
+				lines = append(lines, repoHeaderInlineStyle.Render("  "+repo))
+				prevRepo = repo
+			}
+			text := formatItem(*r.item, width)
+			if rowIdx == cursor {
+				cursorLine = len(lines)
+				lines = append(lines, selectedItemStyle.Width(width).Render(text))
+			} else {
+				lines = append(lines, normalItemStyle.Render(text))
+			}
+			rowIdx++
+		} else if r.expandRepo != "" {
+			var label string
+			if fullLoaded[r.expandRepo] {
+				remaining := countRepoItems(items, r.expandRepo) - itemsPerRepo
+				label = fmt.Sprintf("    [+%d more]", remaining)
+			} else {
+				label = "    [more...]"
+			}
+			if rowIdx == cursor {
+				cursorLine = len(lines)
+				lines = append(lines, selectedItemStyle.Width(width).Render(label))
+			} else {
+				lines = append(lines, normalItemStyle.Render(label))
+			}
+			rowIdx++
+		}
+	}
+
+	return lines, cursorLine
 }
 
 func formatItem(item provider.Item, width int) string {
@@ -66,4 +124,14 @@ func groupByRepo(items []provider.Item) []repoGroup {
 		groups[i] = repoGroup{repo: repo, items: m[repo]}
 	}
 	return groups
+}
+
+func countRepoItems(items []provider.Item, repo string) int {
+	count := 0
+	for _, item := range items {
+		if item.Repo.String() == repo {
+			count++
+		}
+	}
+	return count
 }

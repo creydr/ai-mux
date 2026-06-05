@@ -67,22 +67,30 @@ func (p *Provider) SetComments(number int, comments []provider.Comment) {
 	p.comments[number] = comments
 }
 
-func (p *Provider) ListIssues(_ context.Context, repo provider.RepoRef, _ provider.ListOptions) ([]provider.Item, error) {
+func (p *Provider) ListIssues(_ context.Context, repo provider.RepoRef, opts provider.ListOptions) ([]provider.Item, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if p.err != nil {
 		return nil, p.err
 	}
-	return p.issues[repo.String()], nil
+	items := p.issues[repo.String()]
+	if opts.Limit > 0 && len(items) > opts.Limit {
+		items = items[:opts.Limit]
+	}
+	return items, nil
 }
 
-func (p *Provider) ListPRs(_ context.Context, repo provider.RepoRef, _ provider.ListOptions) ([]provider.Item, error) {
+func (p *Provider) ListPRs(_ context.Context, repo provider.RepoRef, opts provider.ListOptions) ([]provider.Item, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if p.err != nil {
 		return nil, p.err
 	}
-	return p.prs[repo.String()], nil
+	items := p.prs[repo.String()]
+	if opts.Limit > 0 && len(items) > opts.Limit {
+		items = items[:opts.Limit]
+	}
+	return items, nil
 }
 
 func (p *Provider) GetItem(_ context.Context, repo provider.RepoRef, itemType provider.ItemType, number int) (*provider.Item, error) {

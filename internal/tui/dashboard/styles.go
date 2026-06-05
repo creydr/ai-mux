@@ -31,6 +31,10 @@ var (
 			Foreground(lipgloss.Color("#7D56F4")).
 			PaddingTop(1)
 
+	repoHeaderInlineStyle = lipgloss.NewStyle().
+				Bold(true).
+				Foreground(lipgloss.Color("#7D56F4"))
+
 	badgeStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#FF5555")).
 			Bold(true)

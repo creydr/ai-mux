@@ -21,16 +21,73 @@ func testItems() ([]provider.Item, []provider.Item) {
 	return issues, prs
 }
 
+func multiRepoItems(perRepo int) []provider.Item {
+	var items []provider.Item
+	repos := []provider.RepoRef{
+		{Owner: "a", Repo: "alpha"},
+		{Owner: "b", Repo: "beta"},
+	}
+	for _, repo := range repos {
+		for i := range perRepo {
+			items = append(items, provider.Item{
+				ID:     fmt.Sprintf("%s/%s/issues/%d", repo.Owner, repo.Repo, i+1),
+				Number: i + 1,
+				Title:  fmt.Sprintf("Issue %d in %s", i+1, repo.Repo),
+				Type:   provider.ItemTypeIssue,
+				Repo:   repo,
+			})
+		}
+	}
+	return items
+}
+
 func TestModel_InitWithoutConn(t *testing.T) {
-	m := New(nil)
+	m := New(nil, 3)
 	cmd := m.Init()
 	if cmd != nil {
 		t.Error("Init should return nil without a connection")
 	}
+	if m.loading {
+		t.Error("loading should be false without a connection")
+	}
+}
+
+func TestModel_LoadingState(t *testing.T) {
+	m := New(nil, 3)
+	m.loading = true
+
+	view := m.View()
+	if !containsString(view.Content, "Loading...") {
+		t.Error("view should show Loading... when loading")
+	}
+
+	issues, prs := testItems()
+	updated, _ := m.Update(itemsReceivedMsg{issues: issues, prs: prs})
+	m = updated.(Model)
+
+	if m.loading {
+		t.Error("loading should be false after items received")
+	}
+	view = m.View()
+	if containsString(view.Content, "Loading...") {
+		t.Error("view should not show Loading... after items received")
+	}
+}
+
+func TestModel_LoadingClearedOnError(t *testing.T) {
+	m := New(nil, 3)
+	m.loading = true
+
+	updated, _ := m.Update(errMsg{err: fmt.Errorf("fail")})
+	m = updated.(Model)
+
+	if m.loading {
+		t.Error("loading should be false after error")
+	}
 }
 
 func TestModel_TabSwitch(t *testing.T) {
-	m := New(nil)
+	m := New(nil, 3)
 	issues, prs := testItems()
 	m.issues = issues
 	m.prs = prs
@@ -58,7 +115,7 @@ func TestModel_TabSwitch(t *testing.T) {
 }
 
 func TestModel_NavigateDown(t *testing.T) {
-	m := New(nil)
+	m := New(nil, 3)
 	issues, _ := testItems()
 	m.issues = issues
 
@@ -78,7 +135,7 @@ func TestModel_NavigateDown(t *testing.T) {
 }
 
 func TestModel_NavigateUp(t *testing.T) {
-	m := New(nil)
+	m := New(nil, 3)
 	issues, _ := testItems()
 	m.issues = issues
 	m.cursor = 1
@@ -99,7 +156,7 @@ func TestModel_NavigateUp(t *testing.T) {
 }
 
 func TestModel_NavigateWithArrowKeys(t *testing.T) {
-	m := New(nil)
+	m := New(nil, 3)
 	issues, _ := testItems()
 	m.issues = issues
 
@@ -117,7 +174,7 @@ func TestModel_NavigateWithArrowKeys(t *testing.T) {
 }
 
 func TestModel_ItemsReceived(t *testing.T) {
-	m := New(nil)
+	m := New(nil, 3)
 	issues, prs := testItems()
 
 	updated, _ := m.Update(itemsReceivedMsg{issues: issues, prs: prs})
@@ -135,7 +192,7 @@ func TestModel_ItemsReceived(t *testing.T) {
 }
 
 func TestModel_EventReceived_NewIssue(t *testing.T) {
-	m := New(nil)
+	m := New(nil, 3)
 	m.activeTab = tabPRs
 
 	updated, _ := m.Update(eventReceivedMsg{event: event.Event{
@@ -153,7 +210,7 @@ func TestModel_EventReceived_NewIssue(t *testing.T) {
 }
 
 func TestModel_EventReceived_NewPR(t *testing.T) {
-	m := New(nil)
+	m := New(nil, 3)
 	m.activeTab = tabIssues
 
 	updated, _ := m.Update(eventReceivedMsg{event: event.Event{
@@ -171,7 +228,7 @@ func TestModel_EventReceived_NewPR(t *testing.T) {
 }
 
 func TestModel_EventReceived_NoBadgeOnActiveTab(t *testing.T) {
-	m := New(nil)
+	m := New(nil, 3)
 	m.activeTab = tabIssues
 
 	updated, _ := m.Update(eventReceivedMsg{event: event.Event{
@@ -186,7 +243,7 @@ func TestModel_EventReceived_NoBadgeOnActiveTab(t *testing.T) {
 }
 
 func TestModel_BadgeClearsOnTabSwitch(t *testing.T) {
-	m := New(nil)
+	m := New(nil, 3)
 	m.activeTab = tabIssues
 	m.prBadge = 3
 
@@ -199,7 +256,7 @@ func TestModel_BadgeClearsOnTabSwitch(t *testing.T) {
 }
 
 func TestModel_Quit(t *testing.T) {
-	m := New(nil)
+	m := New(nil, 3)
 	_, cmd := m.Update(tea.KeyPressMsg{Code: 'q'})
 	if cmd == nil {
 		t.Error("q should produce a quit command")
@@ -207,7 +264,7 @@ func TestModel_Quit(t *testing.T) {
 }
 
 func TestModel_WindowResize(t *testing.T) {
-	m := New(nil)
+	m := New(nil, 3)
 	updated, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	m = updated.(Model)
 
@@ -217,7 +274,7 @@ func TestModel_WindowResize(t *testing.T) {
 }
 
 func TestModel_ErrorMessage(t *testing.T) {
-	m := New(nil)
+	m := New(nil, 3)
 	updated, _ := m.Update(errMsg{err: fmt.Errorf("connection failed")})
 	m = updated.(Model)
 
@@ -231,10 +288,12 @@ func TestModel_ErrorMessage(t *testing.T) {
 }
 
 func TestModel_View_ShowsItems(t *testing.T) {
-	m := New(nil)
+	m := New(nil, 3)
 	m.width = 80
 	issues, _ := testItems()
 	m.issues = issues
+	m.updateRepoList()
+	m.rebuildViewport()
 
 	view := m.View()
 	if !containsString(view.Content, "Bug report") {
@@ -243,7 +302,7 @@ func TestModel_View_ShowsItems(t *testing.T) {
 }
 
 func TestModel_SelectedItem(t *testing.T) {
-	m := New(nil)
+	m := New(nil, 3)
 	issues, _ := testItems()
 	m.issues = issues
 	m.cursor = 0
@@ -255,7 +314,7 @@ func TestModel_SelectedItem(t *testing.T) {
 }
 
 func TestModel_SelectedItem_Empty(t *testing.T) {
-	m := New(nil)
+	m := New(nil, 3)
 	item := m.selectedItem()
 	if item != nil {
 		t.Error("should return nil for empty list")
@@ -263,7 +322,7 @@ func TestModel_SelectedItem_Empty(t *testing.T) {
 }
 
 func TestModel_UpdatedEvent(t *testing.T) {
-	m := New(nil)
+	m := New(nil, 3)
 	m.issues = []provider.Item{
 		{ID: "o/r/issues/1", Number: 1, Title: "Old title", UpdatedAt: time.Now()},
 	}
@@ -279,6 +338,561 @@ func TestModel_UpdatedEvent(t *testing.T) {
 	}
 	if m.issues[0].Title != "New title" {
 		t.Errorf("expected updated title, got %q", m.issues[0].Title)
+	}
+}
+
+func manyItems(n int) []provider.Item {
+	items := make([]provider.Item, n)
+	for i := range n {
+		items[i] = provider.Item{
+			ID:     fmt.Sprintf("o/r/issues/%d", i+1),
+			Number: i + 1,
+			Title:  fmt.Sprintf("Issue %d", i+1),
+			Type:   provider.ItemTypeIssue,
+			Repo:   provider.RepoRef{Owner: "o", Repo: "r"},
+		}
+	}
+	return items
+}
+
+func TestModel_ScrollDown(t *testing.T) {
+	m := New(nil, 100)
+	m.height = 16
+	m.issues = manyItems(30)
+	m.fullLoaded["o/r"] = true
+
+	for range 15 {
+		updated, _ := m.Update(tea.KeyPressMsg{Code: 'j'})
+		m = updated.(Model)
+	}
+
+	if m.cursor != 15 {
+		t.Errorf("expected cursor 15, got %d", m.cursor)
+	}
+
+	view := m.View()
+	row := m.visibleItems()[m.cursor]
+	if row.item != nil && !containsString(view.Content, row.item.Title) {
+		t.Error("cursor item should be visible in view")
+	}
+}
+
+func TestModel_ScrollUp(t *testing.T) {
+	m := New(nil, 100)
+	m.height = 16
+	m.issues = manyItems(30)
+	m.fullLoaded["o/r"] = true
+	m.cursor = 20
+	m.rebuildViewport()
+
+	for range 10 {
+		updated, _ := m.Update(tea.KeyPressMsg{Code: 'k'})
+		m = updated.(Model)
+	}
+
+	if m.cursor != 10 {
+		t.Errorf("expected cursor 10, got %d", m.cursor)
+	}
+
+	view := m.View()
+	row := m.visibleItems()[m.cursor]
+	if row.item != nil && !containsString(view.Content, row.item.Title) {
+		t.Error("cursor item should be visible in view after scrolling up")
+	}
+}
+
+func TestModel_TabSwitchResetsCursor(t *testing.T) {
+	m := New(nil, 3)
+	m.issues = manyItems(30)
+	m.cursor = 15
+
+	updated, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyTab})
+	m = updated.(Model)
+
+	if m.cursor != 0 {
+		t.Error("cursor should reset on tab switch")
+	}
+}
+
+func TestModel_PanelFocusSwitch(t *testing.T) {
+	m := New(nil, 3)
+	if m.focusPanel != panelItems {
+		t.Fatal("should start focused on items panel")
+	}
+
+	updated, _ := m.Update(tea.KeyPressMsg{Code: 'h'})
+	m = updated.(Model)
+	if m.focusPanel != panelRepos {
+		t.Error("h should switch focus to repos panel")
+	}
+
+	updated, _ = m.Update(tea.KeyPressMsg{Code: 'l'})
+	m = updated.(Model)
+	if m.focusPanel != panelItems {
+		t.Error("l should switch focus to items panel")
+	}
+
+	updated, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyLeft})
+	m = updated.(Model)
+	if m.focusPanel != panelRepos {
+		t.Error("left arrow should switch focus to repos panel")
+	}
+
+	updated, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyRight})
+	m = updated.(Model)
+	if m.focusPanel != panelItems {
+		t.Error("right arrow should switch focus to items panel")
+	}
+}
+
+func TestModel_RepoSelection(t *testing.T) {
+	m := New(nil, 3)
+	m.issues = multiRepoItems(5)
+	m.updateRepoList()
+
+	m.focusPanel = panelRepos
+	m.repoCursor = 1
+
+	updated, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	m = updated.(Model)
+
+	if m.selectedRepo == "" {
+		t.Fatal("selectedRepo should be set")
+	}
+	items := m.currentItems()
+	for _, item := range items {
+		if item.Repo.String() != m.selectedRepo {
+			t.Errorf("expected all items from %s, got %s", m.selectedRepo, item.Repo.String())
+		}
+	}
+	if m.focusPanel != panelItems {
+		t.Error("focus should return to items panel after selection")
+	}
+}
+
+func TestModel_RepoSelectionAll(t *testing.T) {
+	m := New(nil, 3)
+	m.issues = multiRepoItems(5)
+	m.updateRepoList()
+	m.selectedRepo = m.repos[0]
+
+	m.focusPanel = panelRepos
+	m.repoCursor = 0
+
+	updated, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	m = updated.(Model)
+
+	if m.selectedRepo != "" {
+		t.Error("selecting 'All' should clear selectedRepo")
+	}
+	items := m.currentItems()
+	if len(items) != 10 {
+		t.Errorf("expected 10 items with All selected, got %d", len(items))
+	}
+}
+
+func TestModel_CollapsedGroups(t *testing.T) {
+	m := New(nil, 2)
+	m.issues = multiRepoItems(5)
+	m.updateRepoList()
+	m.fullLoaded["a/alpha"] = true
+	m.fullLoaded["b/beta"] = true
+
+	rows := m.visibleItems()
+
+	expandCount := 0
+	itemCount := 0
+	for _, r := range rows {
+		if r.expandRepo != "" {
+			expandCount++
+		}
+		if r.item != nil {
+			itemCount++
+		}
+	}
+
+	if itemCount != 4 {
+		t.Errorf("expected 4 visible items (2 per repo), got %d", itemCount)
+	}
+	if expandCount != 2 {
+		t.Errorf("expected 2 expand rows, got %d", expandCount)
+	}
+}
+
+func TestModel_ExpandGroup(t *testing.T) {
+	m := New(nil, 2)
+	m.issues = multiRepoItems(5)
+	m.updateRepoList()
+	m.fullLoaded["a/alpha"] = true
+	m.fullLoaded["b/beta"] = true
+
+	rows := m.visibleItems()
+	expandIdx := -1
+	for i, r := range rows {
+		if r.expandRepo != "" {
+			expandIdx = i
+			break
+		}
+	}
+	if expandIdx == -1 {
+		t.Fatal("should have an expandable row")
+	}
+
+	m.cursor = expandIdx
+	m.focusPanel = panelItems
+	updated, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	m = updated.(Model)
+
+	rows = m.visibleItems()
+	for _, r := range rows {
+		if r.expandRepo == m.repos[0] {
+			t.Error("first repo should no longer have expand row after expanding")
+		}
+	}
+}
+
+func TestModel_RepoListUpdated(t *testing.T) {
+	m := New(nil, 3)
+	issues, prs := testItems()
+
+	updated, _ := m.Update(itemsReceivedMsg{issues: issues, prs: prs})
+	m = updated.(Model)
+
+	if len(m.repos) != 1 {
+		t.Errorf("expected 1 repo, got %d", len(m.repos))
+	}
+	if m.repos[0] != "o/r" {
+		t.Errorf("expected repo o/r, got %s", m.repos[0])
+	}
+}
+
+func TestModel_RepoPanelNavigation(t *testing.T) {
+	m := New(nil, 3)
+	m.issues = multiRepoItems(3)
+	m.updateRepoList()
+	m.focusPanel = panelRepos
+
+	if m.repoCursor != 0 {
+		t.Fatal("repo cursor should start at 0")
+	}
+
+	updated, _ := m.Update(tea.KeyPressMsg{Code: 'j'})
+	m = updated.(Model)
+	if m.repoCursor != 1 {
+		t.Errorf("expected repoCursor 1, got %d", m.repoCursor)
+	}
+
+	updated, _ = m.Update(tea.KeyPressMsg{Code: 'j'})
+	m = updated.(Model)
+	if m.repoCursor != 2 {
+		t.Errorf("expected repoCursor 2, got %d", m.repoCursor)
+	}
+
+	updated, _ = m.Update(tea.KeyPressMsg{Code: 'j'})
+	m = updated.(Model)
+	if m.repoCursor != 2 {
+		t.Error("repo cursor should not go past last repo")
+	}
+
+	updated, _ = m.Update(tea.KeyPressMsg{Code: 'k'})
+	m = updated.(Model)
+	if m.repoCursor != 1 {
+		t.Errorf("expected repoCursor 1, got %d", m.repoCursor)
+	}
+}
+
+func TestModel_DefaultItemsPerRepo(t *testing.T) {
+	m := New(nil, 0)
+	if m.itemsPerRepo != 3 {
+		t.Errorf("expected default itemsPerRepo 3, got %d", m.itemsPerRepo)
+	}
+}
+
+func TestModel_TabSwitchClearsExpanded(t *testing.T) {
+	m := New(nil, 2)
+	m.issues = multiRepoItems(5)
+	m.updateRepoList()
+	m.expanded["a/alpha"] = true
+
+	updated, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyTab})
+	m = updated.(Model)
+
+	if len(m.expanded) != 0 {
+		t.Error("expanded map should be cleared on tab switch")
+	}
+}
+
+func TestModel_DetectFullLoaded(t *testing.T) {
+	m := New(nil, 3)
+	m.issues = []provider.Item{
+		{ID: "a/x/issues/1", Number: 1, Repo: provider.RepoRef{Owner: "a", Repo: "x"}},
+		{ID: "a/x/issues/2", Number: 2, Repo: provider.RepoRef{Owner: "a", Repo: "x"}},
+	}
+	m.prs = []provider.Item{
+		{ID: "a/x/prs/1", Number: 1, Repo: provider.RepoRef{Owner: "a", Repo: "x"}},
+	}
+
+	updated, _ := m.Update(itemsReceivedMsg{issues: m.issues, prs: m.prs})
+	m = updated.(Model)
+
+	if !m.fullLoaded["a/x"] {
+		t.Error("repo with fewer items than limit should be marked fullLoaded")
+	}
+}
+
+func TestModel_NotFullLoadedAtLimit(t *testing.T) {
+	m := New(nil, 3)
+	m.issues = multiRepoItems(3)
+
+	updated, _ := m.Update(itemsReceivedMsg{issues: m.issues, prs: nil})
+	m = updated.(Model)
+
+	if m.fullLoaded["a/alpha"] {
+		t.Error("repo with exactly itemsPerRepo items should NOT be marked fullLoaded")
+	}
+}
+
+func TestModel_MoreLabelNotFullLoaded(t *testing.T) {
+	m := New(nil, 2)
+	m.issues = multiRepoItems(2)
+	m.updateRepoList()
+	m.rebuildViewport()
+
+	view := m.View()
+	if !containsString(view.Content, "[more...]") {
+		t.Error("should show [more...] for repos not fully loaded")
+	}
+}
+
+func TestModel_MoreLabelFullLoaded(t *testing.T) {
+	m := New(nil, 2)
+	m.issues = multiRepoItems(5)
+	m.updateRepoList()
+	m.fullLoaded["a/alpha"] = true
+	m.fullLoaded["b/beta"] = true
+	m.rebuildViewport()
+
+	view := m.View()
+	if !containsString(view.Content, "[+3 more]") {
+		t.Error("should show [+3 more] for fully loaded repos with 5 items and limit 2")
+	}
+}
+
+func TestModel_RepoExpandedMsg(t *testing.T) {
+	m := New(nil, 2)
+	m.issues = multiRepoItems(2)
+	m.updateRepoList()
+
+	fullItems := make([]provider.Item, 5)
+	for i := range 5 {
+		fullItems[i] = provider.Item{
+			ID:     fmt.Sprintf("a/alpha/issues/%d", i+1),
+			Number: i + 1,
+			Title:  fmt.Sprintf("Issue %d", i+1),
+			Repo:   provider.RepoRef{Owner: "a", Repo: "alpha"},
+		}
+	}
+
+	updated, _ := m.Update(repoExpandedMsg{
+		repo:     "a/alpha",
+		items:    fullItems,
+		itemType: provider.ItemTypeIssue,
+	})
+	m = updated.(Model)
+
+	if !m.fullLoaded["a/alpha"] {
+		t.Error("repo should be marked fullLoaded after expand")
+	}
+	if !m.expanded["a/alpha"] {
+		t.Error("repo should be auto-expanded after expand")
+	}
+
+	alphaCount := 0
+	for _, item := range m.issues {
+		if item.Repo.String() == "a/alpha" {
+			alphaCount++
+		}
+	}
+	if alphaCount != 5 {
+		t.Errorf("expected 5 alpha items after expand, got %d", alphaCount)
+	}
+}
+
+func TestModel_ChunkedExpand_NotFullWhenAtLimit(t *testing.T) {
+	m := New(nil, 2)
+	m.height = 50
+	m.issues = multiRepoItems(2)
+	m.updateRepoList()
+
+	chunkItems := make([]provider.Item, 8)
+	for i := range 8 {
+		chunkItems[i] = provider.Item{
+			ID:     fmt.Sprintf("a/alpha/issues/%d", i+1),
+			Number: i + 1,
+			Title:  fmt.Sprintf("Issue %d", i+1),
+			Repo:   provider.RepoRef{Owner: "a", Repo: "alpha"},
+		}
+	}
+
+	updated, _ := m.Update(repoExpandedMsg{
+		repo:           "a/alpha",
+		items:          chunkItems,
+		itemType:       provider.ItemTypeIssue,
+		requestedLimit: 8,
+	})
+	m = updated.(Model)
+
+	if m.fullLoaded["a/alpha"] {
+		t.Error("repo should NOT be fullLoaded when returned items == requestedLimit")
+	}
+	if !m.expanded["a/alpha"] {
+		t.Error("repo should be expanded after chunk load")
+	}
+
+	view := m.View()
+	if !containsString(view.Content, "[more...]") {
+		t.Error("should still show [more...] for expanded but not fully loaded repo")
+	}
+}
+
+func TestModel_ChunkedExpand_FullWhenUnderLimit(t *testing.T) {
+	m := New(nil, 2)
+	m.issues = multiRepoItems(2)
+	m.updateRepoList()
+
+	chunkItems := make([]provider.Item, 5)
+	for i := range 5 {
+		chunkItems[i] = provider.Item{
+			ID:     fmt.Sprintf("a/alpha/issues/%d", i+1),
+			Number: i + 1,
+			Title:  fmt.Sprintf("Issue %d", i+1),
+			Repo:   provider.RepoRef{Owner: "a", Repo: "alpha"},
+		}
+	}
+
+	updated, _ := m.Update(repoExpandedMsg{
+		repo:           "a/alpha",
+		items:          chunkItems,
+		itemType:       provider.ItemTypeIssue,
+		requestedLimit: 8,
+	})
+	m = updated.(Model)
+
+	if !m.fullLoaded["a/alpha"] {
+		t.Error("repo should be fullLoaded when returned items < requestedLimit")
+	}
+}
+
+func TestModel_ScrollToLastRow_MultiRepo(t *testing.T) {
+	m := New(nil, 3)
+	m.height = 16
+	m.issues = multiRepoItems(3)
+	m.updateRepoList()
+	m.fullLoaded["a/alpha"] = true
+	m.fullLoaded["b/beta"] = true
+
+	rows := m.visibleItems()
+	totalRows := len(rows)
+
+	for range totalRows - 1 {
+		updated, _ := m.Update(tea.KeyPressMsg{Code: 'j'})
+		m = updated.(Model)
+	}
+
+	if m.cursor != totalRows-1 {
+		t.Errorf("cursor should reach the last row %d, got %d", totalRows-1, m.cursor)
+	}
+
+	view := m.View()
+	lastRow := rows[totalRows-1]
+	if lastRow.item != nil {
+		if !containsString(view.Content, lastRow.item.Title) {
+			t.Errorf("last item %q should be visible in the view", lastRow.item.Title)
+		}
+	}
+}
+
+func TestModel_ScrollToBottom_CursorVisible(t *testing.T) {
+	m := New(nil, 2)
+	m.height = 12
+	items := multiRepoItems(5)
+	m.issues = items
+	m.updateRepoList()
+	m.fullLoaded["a/alpha"] = true
+	m.fullLoaded["b/beta"] = true
+	m.expanded["a/alpha"] = true
+	m.expanded["b/beta"] = true
+
+	rows := m.visibleItems()
+	totalRows := len(rows)
+
+	for range totalRows - 1 {
+		updated, _ := m.Update(tea.KeyPressMsg{Code: 'j'})
+		m = updated.(Model)
+	}
+
+	if m.cursor != totalRows-1 {
+		t.Errorf("should reach last row %d, got %d", totalRows-1, m.cursor)
+	}
+
+	view := m.View()
+	lastRow := rows[totalRows-1]
+	if lastRow.item != nil {
+		if !containsString(view.Content, lastRow.item.Title) {
+			t.Errorf("last item %q must be visible, cursor=%d", lastRow.item.Title, m.cursor)
+		}
+	}
+}
+
+func manyRepoItems(numRepos, perRepo int) []provider.Item {
+	var items []provider.Item
+	for r := range numRepos {
+		repo := provider.RepoRef{Owner: "org", Repo: fmt.Sprintf("repo-%02d", r+1)}
+		for i := range perRepo {
+			items = append(items, provider.Item{
+				ID:     fmt.Sprintf("%s/issues/%d", repo.String(), i+1),
+				Number: i + 1,
+				Title:  fmt.Sprintf("Issue %d in %s", i+1, repo.Repo),
+				Type:   provider.ItemTypeIssue,
+				Repo:   repo,
+			})
+		}
+	}
+	return items
+}
+
+func TestModel_ScrollToBottom_ManyRepos(t *testing.T) {
+	m := New(nil, 3)
+	m.height = 30
+	m.width = 80
+	m.issues = manyRepoItems(11, 3)
+	m.updateRepoList()
+	for _, repo := range m.repos {
+		m.fullLoaded[repo] = true
+	}
+
+	rows := m.visibleItems()
+	totalRows := len(rows)
+
+	for i := range totalRows - 1 {
+		updated, _ := m.Update(tea.KeyPressMsg{Code: 'j'})
+		m = updated.(Model)
+
+		view := m.View()
+		currentRow := rows[m.cursor]
+		var needle string
+		if currentRow.item != nil {
+			needle = currentRow.item.Title
+		} else if currentRow.expandRepo != "" {
+			needle = "more"
+		}
+		if needle != "" && !containsString(view.Content, needle) {
+			t.Fatalf("step %d: cursor=%d — %q not visible in view", i+1, m.cursor, needle)
+		}
+	}
+
+	if m.cursor != totalRows-1 {
+		t.Errorf("should reach last row %d, got %d", totalRows-1, m.cursor)
 	}
 }
 

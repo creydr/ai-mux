@@ -41,12 +41,17 @@ func (p *GitHubProvider) Name() string {
 }
 
 func (p *GitHubProvider) ListIssues(ctx context.Context, repo provider.RepoRef, opts provider.ListOptions) ([]provider.Item, error) {
+	pp := perPage(opts.PerPage)
+	if opts.Limit > 0 && opts.Limit < pp {
+		pp = opts.Limit
+	}
+
 	ghOpts := &gh.IssueListByRepoOptions{
 		State:     opts.State,
 		Sort:      "updated",
 		Direction: "desc",
 		ListOptions: gh.ListOptions{
-			PerPage: perPage(opts.PerPage),
+			PerPage: pp,
 		},
 	}
 
@@ -69,6 +74,9 @@ func (p *GitHubProvider) ListIssues(ctx context.Context, repo provider.RepoRef, 
 				continue
 			}
 			items = append(items, mapIssue(repo, issue))
+			if opts.Limit > 0 && len(items) >= opts.Limit {
+				return items[:opts.Limit], nil
+			}
 		}
 
 		if resp.NextPage == 0 {
@@ -81,12 +89,17 @@ func (p *GitHubProvider) ListIssues(ctx context.Context, repo provider.RepoRef, 
 }
 
 func (p *GitHubProvider) ListPRs(ctx context.Context, repo provider.RepoRef, opts provider.ListOptions) ([]provider.Item, error) {
+	pp := perPage(opts.PerPage)
+	if opts.Limit > 0 && opts.Limit < pp {
+		pp = opts.Limit
+	}
+
 	ghOpts := &gh.PullRequestListOptions{
 		State:     opts.State,
 		Sort:      "updated",
 		Direction: "desc",
 		ListOptions: gh.ListOptions{
-			PerPage: perPage(opts.PerPage),
+			PerPage: pp,
 		},
 	}
 	if ghOpts.State == "" {
@@ -102,6 +115,9 @@ func (p *GitHubProvider) ListPRs(ctx context.Context, repo provider.RepoRef, opt
 
 		for _, pr := range prs {
 			items = append(items, mapPR(repo, pr))
+			if opts.Limit > 0 && len(items) >= opts.Limit {
+				return items[:opts.Limit], nil
+			}
 		}
 
 		if resp.NextPage == 0 {

@@ -49,7 +49,8 @@ type SubscribePayload struct {
 }
 
 type ListPayload struct {
-	Repo string `json:"repo"`
+	Repo  string `json:"repo"`
+	Limit int    `json:"limit,omitempty"`
 }
 
 type GetItemPayload struct {

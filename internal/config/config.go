@@ -11,13 +11,14 @@ import (
 )
 
 type Config struct {
-	Repos         []RepoConfig  `yaml:"repos"`
-	PollInterval  Duration      `yaml:"poll_interval"`
-	GitHub        GitHubConfig  `yaml:"github"`
-	Notifications NotifyConfig  `yaml:"notifications"`
-	Agents        []AgentConfig `yaml:"agents"`
-	DefaultAgent  string        `yaml:"default_agent"`
-	ACP           ACPConfig     `yaml:"acp"`
+	Repos         []RepoConfig    `yaml:"repos"`
+	PollInterval  Duration        `yaml:"poll_interval"`
+	GitHub        GitHubConfig    `yaml:"github"`
+	Notifications NotifyConfig    `yaml:"notifications"`
+	Agents        []AgentConfig   `yaml:"agents"`
+	DefaultAgent  string          `yaml:"default_agent"`
+	ACP           ACPConfig       `yaml:"acp"`
+	Dashboard     DashboardConfig `yaml:"dashboard"`
 }
 
 type RepoConfig struct {
@@ -49,6 +50,10 @@ type AgentConfig struct {
 
 type ACPConfig struct {
 	Socket string `yaml:"socket"`
+}
+
+type DashboardConfig struct {
+	ItemsPerRepo int `yaml:"items_per_repo"`
 }
 
 type Duration struct {
@@ -85,6 +90,7 @@ func Default() *Config {
 		PollInterval: Duration{30 * time.Second},
 		GitHub:       GitHubConfig{TokenFrom: "gh"},
 		ACP:          ACPConfig{Socket: "/tmp/ai-mux.sock"},
+		Dashboard:    DashboardConfig{ItemsPerRepo: 3},
 	}
 }
 

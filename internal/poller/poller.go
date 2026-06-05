@@ -3,6 +3,7 @@ package poller
 import (
 	"context"
 	"log"
+	"sync"
 	"time"
 
 	"github.com/creydr/ai-mux/internal/event"
@@ -49,11 +50,17 @@ func (p *Poller) Start(ctx context.Context) error {
 }
 
 func (p *Poller) PollOnce(ctx context.Context) error {
+	var wg sync.WaitGroup
 	for _, repo := range p.repos {
-		if err := p.pollRepo(ctx, repo); err != nil {
-			log.Printf("error polling %s: %v", repo, err)
-		}
+		wg.Add(1)
+		go func(r provider.RepoRef) {
+			defer wg.Done()
+			if err := p.pollRepo(ctx, r); err != nil {
+				log.Printf("error polling %s: %v", r, err)
+			}
+		}(repo)
 	}
+	wg.Wait()
 	return nil
 }
 

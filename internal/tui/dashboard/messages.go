@@ -21,3 +21,10 @@ type errMsg struct {
 type connectResultMsg struct {
 	err error
 }
+
+type repoExpandedMsg struct {
+	repo           string
+	items          []provider.Item
+	itemType       provider.ItemType
+	requestedLimit int
+}

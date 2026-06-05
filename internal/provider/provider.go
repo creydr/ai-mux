@@ -67,6 +67,7 @@ type ListOptions struct {
 	State   string
 	Since   time.Time
 	PerPage int
+	Limit   int
 }
 
 type Provider interface {
