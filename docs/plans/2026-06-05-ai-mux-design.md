@@ -50,6 +50,8 @@ ai-mux/
 │   │   ├── notifier.go       # Interface: Notify(event)
 │   │   ├── desktop/          # notify-send implementation
 │   │   └── tui/              # In-TUI notification
+│   ├── worktree/             # Git worktree management
+│   │   └── worktree.go       # Create, list, clean worktrees
 │   ├── action/               # Action interface + implementations
 │   │   ├── action.go         # Interface: Execute(context, item)
 │   │   ├── agent/            # AI agent runner (Claude, Gemini, etc.)
@@ -161,8 +163,27 @@ type AgentRunner interface {
     Name() string
     Supports(actionType ActionType) bool
     Command(ctx ActionContext) *exec.Cmd
+    PostSession() PostSessionBehavior // "keep" or "auto-pr"
 }
 ```
+
+### Worktree Isolation
+
+Every agent action runs in a dedicated git worktree, regardless of action type. This ensures:
+- Full repo context for the agent (code navigation, tests, etc.)
+- No interference with your current working branch or uncommitted changes
+- Multiple actions can run in parallel on the same repo
+
+Worktrees are created at `<repo-path>/.worktrees/<action>-<number>` (e.g., `.worktrees/fix-issue-42`, `.worktrees/review-pr-123`).
+
+### Post-Session Behavior
+
+After an agent session ends, the worktree cleanup depends on whether the agent produced code changes:
+
+- **No changes** — worktree is always cleaned up automatically (typical for reviews)
+- **Changes produced** — behavior is configurable per agent:
+  - **`keep`** — Worktree stays on disk for manual review. `ai-mux worktree list` shows all active worktrees, `ai-mux worktree clean` removes stale ones.
+  - **`auto-pr`** — Commits any uncommitted changes, pushes the branch, opens a draft PR linking to the original issue, then removes the worktree.
 
 ### Configuration
 
@@ -170,12 +191,14 @@ type AgentRunner interface {
 agents:
   - name: claude
     command: claude
+    post_session: auto-pr  # keep | auto-pr
     args_templates:
       fix_issue: "--print 'Fix issue #{{.Number}}: {{.Title}}'"
       review_pr: "--print 'Review PR #{{.Number}}'"
 
   - name: gemini
     command: gemini
+    post_session: keep
     args_templates:
       fix_issue: "-p 'Fix issue #{{.Number}}: {{.Title}}'"
       review_pr: "-p 'Review PR #{{.Number}}'"
@@ -189,9 +212,12 @@ Location: `~/.config/ai-mux/config.yaml`
 
 ```yaml
 repos:
-  - owner/repo-a
-  - owner/repo-b
-  - org/repo-c
+  - name: owner/repo-a
+    path: ~/development/repo-a
+  - name: owner/repo-b
+    path: ~/development/repo-b
+  - name: org/repo-c
+    path: ~/projects/repo-c
 
 poll_interval: 30s
 
@@ -208,6 +234,7 @@ notifications:
 agents:
   - name: claude
     command: claude
+    post_session: auto-pr
     args_templates:
       fix_issue: "--print 'Fix issue #{{.Number}}: {{.Title}}'"
       review_pr: "--print 'Review PR #{{.Number}}'"
@@ -226,6 +253,7 @@ Tracks:
 - Last seen issue/PR ID per repo
 - Read/unread status per item
 - Active agent sessions
+- Active worktrees (path, repo, action, status)
 - Attached clients
 
 ## Daemon ↔ Client Protocol
