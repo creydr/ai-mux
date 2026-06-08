@@ -1,15 +1,15 @@
 # ai-mux
 
-A terminal-based tool for monitoring multiple GitHub repositories. Watches for new issues, PRs, and review activity with actionable integrations — spawn AI agent sessions to fix issues or review PRs, and push diffs to your IDE via ACP.
+A terminal-based tool for monitoring multiple GitHub repositories. Watches for new issues, PRs, and review activity with actionable integrations — spawn AI agent sessions to fix issues or review PRs, and interact with sessions from your IDE via ACP.
 
 ## Architecture
 
 **ai-mux** uses a daemon/client architecture:
 
-- **Daemon** — background process that polls GitHub, maintains state, and serves clients over a Unix socket
-- **Dashboard** — full-screen TUI showing all watched repos with tabbed Issues/PRs views
-- **Attach** — focused TUI for a single issue or PR, usable in a dedicated tmux pane or IDE terminal
-- **ACP Agent** — IDE integration via Agent Client Protocol (JSON-RPC over stdio) for viewing diffs and running agent sessions
+- **Daemon** — background process that polls GitHub, maintains state, manages sessions, and serves clients over a Unix socket
+- **Dashboard** — full-screen TUI showing all watched repos with tabbed Issues/PRs/Sessions views
+- **Attach** — focused TUI for a single issue or PR with markdown rendering
+- **ACP Agent** — IDE integration via JSON-RPC over stdio for listing items and managing agent sessions
 
 ```
 ┌──────────────┐     ┌──────────────┐     ┌──────────────┐
@@ -25,11 +25,11 @@ A terminal-based tool for monitoring multiple GitHub repositories. Watches for n
               │  ┌────────┐│     ┌──────────┐
               │  │ Poller ├┼────►│  GitHub   │
               │  └────────┘│     └──────────┘
+              │  ┌────────┐│     ┌──────────┐
+              │  │Sessions├┼────►│  tmux    │
+              │  └────────┘│     └──────────┘
               │  ┌────────┐│
               │  │ Store  ││
-              │  └────────┘│
-              │  ┌────────┐│
-              │  │ Events ││
               │  └────────┘│
               └────────────┘
 ```
@@ -74,13 +74,13 @@ default_agent: claude
 2. Start the daemon:
 
 ```sh
-bin/ai-mux daemon start
+ai-mux daemon start
 ```
 
 3. Open the dashboard:
 
 ```sh
-bin/ai-mux dashboard
+ai-mux dashboard
 ```
 
 ## Usage
@@ -101,6 +101,8 @@ ai-mux daemon status
 ai-mux daemon stop
 ```
 
+Sessions are persisted to `~/.ai-mux/sessions.json` and survive daemon restarts. On startup, the daemon reconciles persisted sessions with live tmux state.
+
 ### Dashboard
 
 ```sh
@@ -108,11 +110,27 @@ ai-mux dashboard
 ```
 
 Keyboard shortcuts:
-- `Tab` — switch between Issues and PRs tabs
-- `j`/`k` or arrow keys — navigate items
-- `o` or `Enter` — open item in browser
+
+**Item list (Issues/PRs tabs):**
+- `Tab` — switch between Issues, PRs, and Sessions tabs
+- Arrow keys — navigate items
+- `Enter` — open item detail view
+- `o` — open item in browser
 - `r` — refresh
-- `q` — quit
+- `Ctrl-c` — quit
+
+**Item detail view:**
+- Arrow keys — scroll content
+- `a` — spawn agent session for this item
+- `r` — refresh
+- `o` — open in browser
+- `Esc` — back to list
+
+**Sessions tab:**
+- Arrow keys — navigate sessions
+- `Enter` — attach to session (opens tmux)
+- `s` — stop selected session
+- `Ctrl-c` — quit
 
 ### Attach
 
@@ -125,7 +143,7 @@ ai-mux attach pr/owner/repo/123
 ```
 
 Keyboard shortcuts:
-- `j`/`k` — scroll
+- Arrow keys — scroll
 - `o` — open in browser
 - `r` — refresh
 - `q` — quit
@@ -133,17 +151,37 @@ Keyboard shortcuts:
 ### ACP (IDE Integration)
 
 ```sh
-# Start the ACP agent (used by IDEs, not typically run manually)
+# Start the ACP agent (communicates over stdin/stdout)
 ai-mux acp
 ```
 
-The ACP agent communicates over stdin/stdout using JSON-RPC 2.0. Configure your IDE to launch `ai-mux acp` as an external tool.
+The ACP agent uses JSON-RPC 2.0 over stdio. Configure your IDE to launch `ai-mux acp` as an external tool, or interact with it directly:
 
-Supported methods:
-- `initialize` — handshake, returns server capabilities
-- `session/new` — create a new agent session for an item
-- `session/prompt` — send a prompt to an active session
-- `items/list` — list issues from the daemon
+```sh
+echo '{"jsonrpc":"2.0","id":1,"method":"session/list","params":{}}' | ai-mux acp
+```
+
+**Supported methods:**
+
+| Method | Description |
+|--------|-------------|
+| `initialize` | Handshake, returns server capabilities |
+| `items/list` | List issues from watched repos |
+| `session/new` | Spawn an agent session (`repo`, `number`, `itemType`, `agent`) |
+| `session/list` | List active sessions |
+| `session/stop` | Stop a session (`sessionId`) |
+| `session/prompt` | Send input to a session (`sessionId`, `prompt`) |
+| `session/attach` | Attach to session output, streams via `session/output` notifications |
+
+**Example: spawn a session**
+```json
+{"jsonrpc":"2.0","id":1,"method":"session/new","params":{"repo":"owner/repo","number":42,"itemType":"issue","agent":"claude"}}
+```
+
+**Example: list sessions**
+```json
+{"jsonrpc":"2.0","id":2,"method":"session/list","params":{}}
+```
 
 ## Configuration Reference
 
@@ -237,11 +275,12 @@ internal/
   provider/          Provider interface and implementations
     github/          GitHub provider (go-github)
     mock/            Mock provider for tests
+  session/           Session lifecycle, persistence, and tmux management
   store/             Store interface and state types
     jsonfile/        JSON file store with atomic writes
   tui/               Terminal UI
-    attach/          Single-item focused view
-    dashboard/       Multi-repo dashboard with tabs
+    attach/          Single-item focused view with markdown rendering
+    dashboard/       Multi-repo dashboard with tabs and session management
   worktree/          Git worktree management and post-session handlers
 ```
 
