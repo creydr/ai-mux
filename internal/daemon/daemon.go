@@ -3,6 +3,7 @@ package daemon
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"sync"
@@ -15,6 +16,7 @@ import (
 	"github.com/creydr/ai-mux/internal/provider"
 	"github.com/creydr/ai-mux/internal/session"
 	"github.com/creydr/ai-mux/internal/store"
+	"github.com/creydr/ai-mux/internal/worktree"
 )
 
 type Daemon struct {
@@ -362,8 +364,14 @@ func (d *Daemon) handleSessionSpawn(cc *clientConn, msg protocol.Message) {
 		return
 	}
 
-	sess, err := d.sessionMgr.Spawn(payload.Repo, payload.Number, payload.ItemType, payload.Agent)
+	wtAction := session.WorktreeAction(payload.WorktreeAction)
+	sess, err := d.sessionMgr.Spawn(payload.Repo, payload.Number, payload.ItemType, payload.Agent, wtAction)
 	if err != nil {
+		if errors.Is(err, worktree.ErrWorktreeExists) {
+			resp, _ := protocol.NewRequest(protocol.MsgWorktreeExists, msg.ID, payload)
+			cc.conn.Send(resp)
+			return
+		}
 		resp, _ := protocol.NewError(msg.ID, err.Error())
 		cc.conn.Send(resp)
 		return

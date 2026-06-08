@@ -122,13 +122,14 @@ func fetchSessionsCmd(conn protocol.Conn) tea.Cmd {
 	}
 }
 
-func spawnSessionCmd(conn protocol.Conn, repo string, number int, itemType, agent string) tea.Cmd {
+func spawnSessionCmd(conn protocol.Conn, repo string, number int, itemType, agent, worktreeAction string) tea.Cmd {
 	return func() tea.Msg {
 		req, _ := protocol.NewRequest(protocol.MsgSessionSpawn, "dash-spawn", protocol.SessionSpawnPayload{
-			Repo:     repo,
-			Number:   number,
-			ItemType: itemType,
-			Agent:    agent,
+			Repo:           repo,
+			Number:         number,
+			ItemType:       itemType,
+			Agent:          agent,
+			WorktreeAction: worktreeAction,
 		})
 		if err := conn.Send(req); err != nil {
 			return errMsg{err: err}
@@ -136,6 +137,9 @@ func spawnSessionCmd(conn protocol.Conn, repo string, number int, itemType, agen
 		resp, err := conn.Receive()
 		if err != nil {
 			return errMsg{err: err}
+		}
+		if resp.Type == protocol.MsgWorktreeExists {
+			return worktreeExistsMsg{repo: repo, number: number, itemType: itemType, agent: agent}
 		}
 		if resp.Type == protocol.MsgError {
 			var errPayload map[string]string

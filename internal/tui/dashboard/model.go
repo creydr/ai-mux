@@ -25,12 +25,14 @@ const (
 	viewAttach
 	viewItemDetail
 	viewAgentPicker
+	viewWorktreeChoice
 )
 
 type spawnRequest struct {
 	repo     string
 	number   int
 	itemType string
+	agent    string
 }
 
 type panel int
@@ -71,8 +73,9 @@ type Model struct {
 	agents        []string
 	defaultAgent  string
 
-	agentCursor  int
-	pendingSpawn *spawnRequest
+	agentCursor       int
+	pendingSpawn      *spawnRequest
+	worktreeChoiceIdx int
 
 	statusText   string
 	statusTickID int
@@ -227,12 +230,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.view = viewOverview
 			m.itemDetail = nil
 			m.rebuildViewport()
-			return m, spawnSessionCmd(m.conn, req.repo, req.number, req.itemType, m.defaultAgent)
+			return m, spawnSessionCmd(m.conn, req.repo, req.number, req.itemType, m.defaultAgent, "")
 		}
 		m.pendingSpawn = req
 		m.agentCursor = 0
 		m.view = viewAgentPicker
 		m.itemDetail = nil
+		return m, nil
+	case worktreeExistsMsg:
+		m.pendingSpawn = &spawnRequest{repo: msg.repo, number: msg.number, itemType: msg.itemType, agent: msg.agent}
+		m.worktreeChoiceIdx = 0
+		m.view = viewWorktreeChoice
 		return m, nil
 	case sessionAttachedMsg:
 		m.view = viewAttach
@@ -271,6 +279,9 @@ func (m Model) View() tea.View {
 	}
 	if m.view == viewAgentPicker {
 		return m.renderAgentPicker()
+	}
+	if m.view == viewWorktreeChoice {
+		return m.renderWorktreeChoice()
 	}
 
 	var b strings.Builder
@@ -369,6 +380,9 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	}
 	if m.view == viewAgentPicker {
 		return m.handleAgentPickerKey(msg)
+	}
+	if m.view == viewWorktreeChoice {
+		return m.handleWorktreeChoiceKey(msg)
 	}
 	if m.view == viewItemDetail && m.itemDetail != nil {
 		updated, cmd := m.itemDetail.Update(msg)
@@ -521,7 +535,7 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		req := &spawnRequest{repo: item.Repo.String(), number: item.Number, itemType: itemType}
 		if m.defaultAgent != "" {
-			return m, spawnSessionCmd(m.conn, req.repo, req.number, req.itemType, m.defaultAgent)
+			return m, spawnSessionCmd(m.conn, req.repo, req.number, req.itemType, m.defaultAgent, "")
 		}
 		m.pendingSpawn = req
 		m.agentCursor = 0
@@ -831,7 +845,7 @@ func (m Model) handleAgentPickerKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.pendingSpawn = nil
 			m.view = viewOverview
 			m.rebuildViewport()
-			return m, spawnSessionCmd(m.conn, req.repo, req.number, req.itemType, agent)
+			return m, spawnSessionCmd(m.conn, req.repo, req.number, req.itemType, agent, "")
 		}
 		return m, nil
 	}
@@ -853,6 +867,73 @@ func (m Model) renderAgentPicker() tea.View {
 			b.WriteString(selectedItemStyle.Render("> "+name) + "\n")
 		} else {
 			b.WriteString("  " + name + "\n")
+		}
+	}
+
+	b.WriteString("\n")
+	b.WriteString(statusBarStyle.Render("  enter: select | esc: cancel"))
+
+	v := tea.NewView(b.String())
+	v.AltScreen = true
+	return v
+}
+
+var worktreeChoices = []struct {
+	label  string
+	action string
+}{
+	{"Resume in existing worktree", "reuse"},
+	{"Start fresh (remove old worktree)", "fresh"},
+	{"Create new (keep old worktree)", "new"},
+}
+
+func (m Model) handleWorktreeChoiceKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	switch {
+	case msg.Code == tea.KeyEscape || msg.Code == 'q':
+		m.view = viewOverview
+		m.pendingSpawn = nil
+		m.rebuildViewport()
+		return m, nil
+	case msg.Code == 'j' || msg.Code == tea.KeyDown:
+		if m.worktreeChoiceIdx < len(worktreeChoices)-1 {
+			m.worktreeChoiceIdx++
+		}
+		return m, nil
+	case msg.Code == 'k' || msg.Code == tea.KeyUp:
+		if m.worktreeChoiceIdx > 0 {
+			m.worktreeChoiceIdx--
+		}
+		return m, nil
+	case msg.Code == tea.KeyEnter:
+		if m.pendingSpawn != nil && m.conn != nil {
+			req := m.pendingSpawn
+			action := worktreeChoices[m.worktreeChoiceIdx].action
+			m.pendingSpawn = nil
+			m.view = viewOverview
+			m.rebuildViewport()
+			return m, spawnSessionCmd(m.conn, req.repo, req.number, req.itemType, req.agent, action)
+		}
+		return m, nil
+	}
+	return m, nil
+}
+
+func (m Model) renderWorktreeChoice() tea.View {
+	var b strings.Builder
+
+	b.WriteString(titleStyle.Render("  Worktree Already Exists"))
+	b.WriteString("\n\n")
+
+	if m.pendingSpawn != nil {
+		b.WriteString(fmt.Sprintf("  A worktree for %s#%d already exists.\n", m.pendingSpawn.repo, m.pendingSpawn.number))
+		b.WriteString("  What would you like to do?\n\n")
+	}
+
+	for i, choice := range worktreeChoices {
+		if i == m.worktreeChoiceIdx {
+			b.WriteString(selectedItemStyle.Render("> "+choice.label) + "\n")
+		} else {
+			b.WriteString("  " + choice.label + "\n")
 		}
 	}
 

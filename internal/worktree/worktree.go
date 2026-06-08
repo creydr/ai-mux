@@ -1,6 +1,7 @@
 package worktree
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -10,10 +11,18 @@ import (
 
 const worktreeDir = ".worktrees"
 
+var ErrWorktreeExists = errors.New("worktree already exists")
+
 type Manager struct{}
 
 func NewManager() *Manager {
 	return &Manager{}
+}
+
+func (m *Manager) Exists(repoPath, name string) bool {
+	wtPath := filepath.Join(repoPath, worktreeDir, name)
+	info, err := os.Stat(wtPath)
+	return err == nil && info.IsDir()
 }
 
 func (m *Manager) Create(repoPath, name string) (string, error) {

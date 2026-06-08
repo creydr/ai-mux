@@ -20,10 +20,20 @@ const tmuxPrefix = "ai-mux-"
 
 type StatusCallback func(sess *Session)
 
+type WorktreeAction string
+
+const (
+	WorktreeCreate WorktreeAction = ""
+	WorktreeReuse  WorktreeAction = "reuse"
+	WorktreeFresh  WorktreeAction = "fresh"
+	WorktreeNew    WorktreeAction = "new"
+)
+
 type WorktreeCreator interface {
 	Create(repoPath, name string) (string, error)
 	CreateForPR(repoPath, name, repoFullName string, prNumber int) (string, error)
 	Remove(repoPath, wtPath string) error
+	Exists(repoPath, name string) bool
 }
 
 type CommandBuilder interface {
@@ -111,7 +121,7 @@ func (m *Manager) SetPostHandler(fn func(repoPath, wtPath, postSession string)) 
 	m.postHandler = fn
 }
 
-func (m *Manager) Spawn(itemRepo string, itemNumber int, itemType string, agentName string) (*Session, error) {
+func (m *Manager) Spawn(itemRepo string, itemNumber int, itemType string, agentName string, wtAction WorktreeAction) (*Session, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -153,15 +163,9 @@ func (m *Manager) Spawn(itemRepo string, itemNumber int, itemType string, agentN
 	}
 
 	wtName := fmt.Sprintf("%s-%s-%d", itemType, agentName, itemNumber)
-	var wtPath string
-	var err error
-	if itemType == "pr" {
-		wtPath, err = m.worktrees.CreateForPR(repo.Path, wtName, itemRepo, itemNumber)
-	} else {
-		wtPath, err = m.worktrees.Create(repo.Path, wtName)
-	}
+	wtPath, err := m.resolveWorktree(repo.Path, wtName, itemRepo, itemNumber, itemType, wtAction)
 	if err != nil {
-		return nil, fmt.Errorf("creating worktree: %w", err)
+		return nil, err
 	}
 	sess.Worktree = wtPath
 
@@ -192,6 +196,68 @@ func (m *Manager) Spawn(itemRepo string, itemNumber int, itemType string, agentN
 
 	m.notifyStatus(sess)
 	return sess, nil
+}
+
+func (m *Manager) resolveWorktree(repoPath, wtName, itemRepo string, itemNumber int, itemType string, action WorktreeAction) (string, error) {
+	switch action {
+	case WorktreeReuse:
+		return filepath.Join(repoPath, ".worktrees", wtName), nil
+	case WorktreeFresh:
+		wtPath := filepath.Join(repoPath, ".worktrees", wtName)
+		for _, s := range m.sessions {
+			if s.Worktree == wtPath && s.IsActive() {
+				return "", fmt.Errorf("worktree is in use by active session %s", s.ID)
+			}
+		}
+		m.worktrees.Remove(repoPath, wtPath)
+		return m.createWorktree(repoPath, wtName, itemRepo, itemNumber, itemType)
+	case WorktreeNew:
+		candidate := wtName
+		for i := 2; m.worktrees.Exists(repoPath, candidate); i++ {
+			candidate = fmt.Sprintf("%s-%d", wtName, i)
+		}
+		return m.createWorktree(repoPath, candidate, itemRepo, itemNumber, itemType)
+	default:
+		if m.worktrees.Exists(repoPath, wtName) {
+			return "", worktree.ErrWorktreeExists
+		}
+		return m.createWorktree(repoPath, wtName, itemRepo, itemNumber, itemType)
+	}
+}
+
+func (m *Manager) createWorktree(repoPath, name, itemRepo string, itemNumber int, itemType string) (string, error) {
+	var wtPath string
+	var err error
+	if itemType == "pr" {
+		wtPath, err = m.worktrees.CreateForPR(repoPath, name, itemRepo, itemNumber)
+	} else {
+		wtPath, err = m.worktrees.Create(repoPath, name)
+	}
+	if err != nil {
+		return "", fmt.Errorf("creating worktree: %w", err)
+	}
+	return wtPath, nil
+}
+
+func (m *Manager) WorktreeExists(itemRepo string, itemNumber int, itemType string, agentName string) bool {
+	repo, ok := m.repos[itemRepo]
+	if !ok {
+		return false
+	}
+	wtName := fmt.Sprintf("%s-%s-%d", itemType, agentName, itemNumber)
+	return m.worktrees.Exists(repo.Path, wtName)
+}
+
+func (m *Manager) FindByWorktree(wtPath string) *Session {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	for _, s := range m.sessions {
+		if s.Worktree == wtPath && s.IsActive() {
+			cp := *s
+			return &cp
+		}
+	}
+	return nil
 }
 
 func (m *Manager) Stop(sessionID string) error {

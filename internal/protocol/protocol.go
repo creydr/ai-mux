@@ -20,6 +20,8 @@ const (
 	MsgSessionInput  MessageType = "session_input"
 	MsgSessionStop   MessageType = "session_stop"
 
+	MsgWorktreeExists MessageType = "worktree_exists"
+
 	MsgEvent         MessageType = "event"
 	MsgStateUpdate   MessageType = "state_update"
 	MsgActionResult  MessageType = "action_result"

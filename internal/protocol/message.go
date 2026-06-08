@@ -82,10 +82,11 @@ type ItemsPayload struct {
 }
 
 type SessionSpawnPayload struct {
-	Repo     string `json:"repo"`
-	Number   int    `json:"number"`
-	ItemType string `json:"item_type"`
-	Agent    string `json:"agent"`
+	Repo           string `json:"repo"`
+	Number         int    `json:"number"`
+	ItemType       string `json:"item_type"`
+	Agent          string `json:"agent"`
+	WorktreeAction string `json:"worktree_action,omitempty"`
 }
 
 type SessionPayload struct {

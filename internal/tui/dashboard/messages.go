@@ -69,3 +69,10 @@ type attachNonOutputMsg struct{}
 type tmuxDetachedMsg struct {
 	err error
 }
+
+type worktreeExistsMsg struct {
+	repo     string
+	number   int
+	itemType string
+	agent    string
+}
