@@ -103,7 +103,7 @@ func renderContentCmd(item *provider.Item, reviews []provider.Review, comments [
 func (m Model) View() tea.View {
 	statusBar := "\n"
 	if m.embedded {
-		statusBar += statusStyle.Render("  c: agent | r: refresh | o: browser | esc: back")
+		statusBar += statusStyle.Render("  a: spawn agent | r: refresh | o: open in browser | esc: back")
 	} else {
 		statusBar += statusStyle.Render("  r: refresh | o: open in browser | q: quit")
 	}
@@ -160,7 +160,7 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return m, openBrowserCmd(m.item.URL)
 		}
 		return m, nil
-	case msg.Code == 'c':
+	case msg.Code == 'a':
 		if m.embedded {
 			ref := m.ref
 			return m, func() tea.Msg { return SpawnSessionMsg{Ref: ref} }

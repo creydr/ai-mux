@@ -1148,7 +1148,7 @@ func TestModel_ItemDetailScrollDoesNotOpenAgentPicker(t *testing.T) {
 	}
 }
 
-func TestModel_ItemDetailCKeySpawnsAgent(t *testing.T) {
+func TestModel_ItemDetailAKeySpawnsAgent(t *testing.T) {
 	m := New(nil, 3, []string{"claude"}, "")
 	issues, _ := testItems()
 	m.issues = issues
@@ -1163,11 +1163,11 @@ func TestModel_ItemDetailCKeySpawnsAgent(t *testing.T) {
 		t.Fatal("should be in item detail view")
 	}
 
-	updated, cmd := m.Update(tea.KeyPressMsg{Code: 'c'})
+	updated, cmd := m.Update(tea.KeyPressMsg{Code: 'a'})
 	m = updated.(Model)
 
 	if cmd == nil {
-		t.Fatal("pressing 'c' in detail view should return a cmd producing SpawnSessionMsg")
+		t.Fatal("pressing 'a' in detail view should return a cmd producing SpawnSessionMsg")
 	}
 
 	msg := cmd()
