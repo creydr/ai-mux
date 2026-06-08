@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"strconv"
+	"sync/atomic"
 
 	"github.com/creydr/ai-mux/internal/protocol"
 	"github.com/creydr/ai-mux/internal/protocol/jsonlines"
@@ -13,6 +15,11 @@ type Agent struct {
 	server *Server
 	conn   protocol.Conn
 	socket string
+	reqID  atomic.Int64
+}
+
+func (a *Agent) nextID() string {
+	return strconv.FormatInt(a.reqID.Add(1), 10)
 }
 
 func NewAgent(reader io.Reader, writer io.Writer, socket string) *Agent {
@@ -69,7 +76,7 @@ func (a *Agent) handleSessionNew(params json.RawMessage) (any, error) {
 		return nil, fmt.Errorf("invalid params: %w", err)
 	}
 
-	msg, err := protocol.NewRequest(protocol.MsgSessionSpawn, "acp-spawn", protocol.SessionSpawnPayload{
+	msg, err := protocol.NewRequest(protocol.MsgSessionSpawn, a.nextID(), protocol.SessionSpawnPayload{
 		Repo:     p.Repo,
 		Number:   p.Number,
 		ItemType: p.ItemType,
@@ -109,7 +116,7 @@ func (a *Agent) handleSessionList(params json.RawMessage) (any, error) {
 		return nil, fmt.Errorf("not connected to daemon")
 	}
 
-	msg, err := protocol.NewRequest(protocol.MsgSessionList, "acp-list-sessions", nil)
+	msg, err := protocol.NewRequest(protocol.MsgSessionList, a.nextID(), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -154,7 +161,7 @@ func (a *Agent) handleSessionStop(params json.RawMessage) (any, error) {
 		return nil, fmt.Errorf("invalid params: %w", err)
 	}
 
-	msg, err := protocol.NewRequest(protocol.MsgSessionStop, "acp-stop", protocol.SessionIDPayload{
+	msg, err := protocol.NewRequest(protocol.MsgSessionStop, a.nextID(), protocol.SessionIDPayload{
 		SessionID: p.SessionID,
 	})
 	if err != nil {
@@ -188,7 +195,7 @@ func (a *Agent) handleSessionPrompt(params json.RawMessage) (any, error) {
 		return nil, fmt.Errorf("invalid params: %w", err)
 	}
 
-	msg, err := protocol.NewRequest(protocol.MsgSessionInput, "acp-input", protocol.SessionInputPayload{
+	msg, err := protocol.NewRequest(protocol.MsgSessionInput, a.nextID(), protocol.SessionInputPayload{
 		SessionID: p.SessionID,
 		Input:     p.Prompt,
 	})
@@ -226,7 +233,7 @@ func (a *Agent) handleSessionAttach(params json.RawMessage) (any, error) {
 		return nil, fmt.Errorf("invalid params: %w", err)
 	}
 
-	msg, err := protocol.NewRequest(protocol.MsgSessionAttach, "acp-attach", protocol.SessionIDPayload{
+	msg, err := protocol.NewRequest(protocol.MsgSessionAttach, a.nextID(), protocol.SessionIDPayload{
 		SessionID: p.SessionID,
 	})
 	if err != nil {
@@ -274,7 +281,7 @@ func (a *Agent) handleItemsList(params json.RawMessage) (any, error) {
 		return nil, fmt.Errorf("not connected to daemon")
 	}
 
-	msg, err := protocol.NewRequest(protocol.MsgListIssues, "acp-list", protocol.ListPayload{})
+	msg, err := protocol.NewRequest(protocol.MsgListIssues, a.nextID(), protocol.ListPayload{})
 	if err != nil {
 		return nil, err
 	}
