@@ -39,7 +39,10 @@ func (a *Agent) Serve() error {
 func (a *Agent) registerHandlers() {
 	a.server.Handle("initialize", a.handleInitialize)
 	a.server.Handle("session/new", a.handleSessionNew)
+	a.server.Handle("session/list", a.handleSessionList)
+	a.server.Handle("session/stop", a.handleSessionStop)
 	a.server.Handle("session/prompt", a.handleSessionPrompt)
+	a.server.Handle("session/attach", a.handleSessionAttach)
 	a.server.Handle("items/list", a.handleItemsList)
 }
 
@@ -57,27 +60,201 @@ func (a *Agent) handleInitialize(params json.RawMessage) (any, error) {
 }
 
 func (a *Agent) handleSessionNew(params json.RawMessage) (any, error) {
+	if a.conn == nil {
+		return nil, fmt.Errorf("not connected to daemon")
+	}
+
 	var p SessionNewParams
 	if err := json.Unmarshal(params, &p); err != nil {
 		return nil, fmt.Errorf("invalid params: %w", err)
 	}
 
+	msg, err := protocol.NewRequest(protocol.MsgSessionSpawn, "acp-spawn", protocol.SessionSpawnPayload{
+		Repo:     p.Repo,
+		Number:   p.Number,
+		ItemType: p.ItemType,
+		Agent:    p.Agent,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if err := a.conn.Send(msg); err != nil {
+		return nil, err
+	}
+	resp, err := a.conn.Receive()
+	if err != nil {
+		return nil, err
+	}
+	if resp.Type == protocol.MsgError {
+		var errPayload map[string]string
+		json.Unmarshal(resp.Payload, &errPayload)
+		return nil, fmt.Errorf("%s", errPayload["error"])
+	}
+
+	var sess protocol.SessionPayload
+	json.Unmarshal(resp.Payload, &sess)
+
 	return SessionNewResult{
-		SessionID: fmt.Sprintf("session-%s", p.ItemRef),
-		Worktree:  fmt.Sprintf("/tmp/ai-mux/worktrees/%s", p.ItemRef),
+		SessionID: sess.ID,
+		Worktree:  sess.Worktree,
 	}, nil
 }
 
+func (a *Agent) handleSessionList(params json.RawMessage) (any, error) {
+	if a.conn == nil {
+		return nil, fmt.Errorf("not connected to daemon")
+	}
+
+	msg, err := protocol.NewRequest(protocol.MsgSessionList, "acp-list-sessions", nil)
+	if err != nil {
+		return nil, err
+	}
+	if err := a.conn.Send(msg); err != nil {
+		return nil, err
+	}
+	resp, err := a.conn.Receive()
+	if err != nil {
+		return nil, err
+	}
+
+	var payload protocol.SessionListPayload
+	json.Unmarshal(resp.Payload, &payload)
+
+	sessions := make([]SessionInfo, len(payload.Sessions))
+	for i, s := range payload.Sessions {
+		sessions[i] = SessionInfo{
+			ID:           s.ID,
+			Repo:         s.Repo,
+			Number:       s.Number,
+			ItemType:     s.ItemType,
+			Agent:        s.Agent,
+			Status:       s.Status,
+			WaitingInput: s.WaitingInput,
+			Worktree:     s.Worktree,
+			CreatedAt:    s.CreatedAt,
+		}
+	}
+
+	return SessionListResult{Sessions: sessions}, nil
+}
+
+func (a *Agent) handleSessionStop(params json.RawMessage) (any, error) {
+	if a.conn == nil {
+		return nil, fmt.Errorf("not connected to daemon")
+	}
+
+	var p SessionStopParams
+	if err := json.Unmarshal(params, &p); err != nil {
+		return nil, fmt.Errorf("invalid params: %w", err)
+	}
+
+	msg, err := protocol.NewRequest(protocol.MsgSessionStop, "acp-stop", protocol.SessionIDPayload{
+		SessionID: p.SessionID,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if err := a.conn.Send(msg); err != nil {
+		return nil, err
+	}
+	resp, err := a.conn.Receive()
+	if err != nil {
+		return nil, err
+	}
+	if resp.Type == protocol.MsgError {
+		var errPayload map[string]string
+		json.Unmarshal(resp.Payload, &errPayload)
+		return nil, fmt.Errorf("%s", errPayload["error"])
+	}
+
+	return SessionStopResult{Status: "stopped"}, nil
+}
+
 func (a *Agent) handleSessionPrompt(params json.RawMessage) (any, error) {
+	if a.conn == nil {
+		return nil, fmt.Errorf("not connected to daemon")
+	}
+
 	var p SessionPromptParams
 	if err := json.Unmarshal(params, &p); err != nil {
 		return nil, fmt.Errorf("invalid params: %w", err)
 	}
 
+	msg, err := protocol.NewRequest(protocol.MsgSessionInput, "acp-input", protocol.SessionInputPayload{
+		SessionID: p.SessionID,
+		Input:     p.Prompt,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if err := a.conn.Send(msg); err != nil {
+		return nil, err
+	}
+	resp, err := a.conn.Receive()
+	if err != nil {
+		return nil, err
+	}
+	if resp.Type == protocol.MsgError {
+		var errPayload map[string]string
+		json.Unmarshal(resp.Payload, &errPayload)
+		return nil, fmt.Errorf("%s", errPayload["error"])
+	}
+
 	return SessionPromptResult{
 		Status:  "accepted",
-		Message: fmt.Sprintf("Prompt queued for session %s", p.SessionID),
+		Message: fmt.Sprintf("Input sent to session %s", p.SessionID),
 	}, nil
+}
+
+func (a *Agent) handleSessionAttach(params json.RawMessage) (any, error) {
+	if a.conn == nil {
+		return nil, fmt.Errorf("not connected to daemon")
+	}
+
+	var p SessionAttachParams
+	if err := json.Unmarshal(params, &p); err != nil {
+		return nil, fmt.Errorf("invalid params: %w", err)
+	}
+
+	msg, err := protocol.NewRequest(protocol.MsgSessionAttach, "acp-attach", protocol.SessionIDPayload{
+		SessionID: p.SessionID,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if err := a.conn.Send(msg); err != nil {
+		return nil, err
+	}
+	resp, err := a.conn.Receive()
+	if err != nil {
+		return nil, err
+	}
+	if resp.Type == protocol.MsgError {
+		var errPayload map[string]string
+		json.Unmarshal(resp.Payload, &errPayload)
+		return nil, fmt.Errorf("%s", errPayload["error"])
+	}
+
+	go a.streamOutput()
+
+	return SessionAttachResult{Status: "attached"}, nil
+}
+
+func (a *Agent) streamOutput() {
+	for {
+		msg, err := a.conn.Receive()
+		if err != nil {
+			return
+		}
+		if msg.Type == protocol.MsgSessionOutput {
+			var payload protocol.SessionOutputPayload
+			json.Unmarshal(msg.Payload, &payload)
+			a.server.WriteNotification("session/output", SessionOutputNotification{
+				SessionID: payload.SessionID,
+				Data:      payload.Data,
+			})
+		}
+	}
 }
 
 func (a *Agent) handleItemsList(params json.RawMessage) (any, error) {

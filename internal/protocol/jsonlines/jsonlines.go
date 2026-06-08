@@ -74,6 +74,10 @@ type Conn struct {
 
 const maxMessageSize = 4 << 20 // 4 MB
 
+func WrapConn(conn net.Conn) *Conn {
+	return newConn(conn)
+}
+
 func newConn(conn net.Conn) *Conn {
 	s := bufio.NewScanner(conn)
 	s.Buffer(make([]byte, 64*1024), maxMessageSize)

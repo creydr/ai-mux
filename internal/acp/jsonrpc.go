@@ -81,6 +81,20 @@ func (s *Server) writeResult(id *json.RawMessage, result any) {
 	fmt.Fprintf(s.writer, "%s\n", data)
 }
 
+func (s *Server) WriteNotification(method string, params any) {
+	n := Notification{
+		JSONRPC: "2.0",
+		Method:  method,
+		Params:  params,
+	}
+	data, err := json.Marshal(n)
+	if err != nil {
+		log.Printf("error marshaling notification: %v", err)
+		return
+	}
+	fmt.Fprintf(s.writer, "%s\n", data)
+}
+
 func (s *Server) writeError(id *json.RawMessage, code int, message string) {
 	resp := Response{
 		JSONRPC: "2.0",
