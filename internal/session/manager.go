@@ -349,15 +349,20 @@ func (m *Manager) AttachOutput(sessionID string) (<-chan []byte, func(), error) 
 	m.outputMu.Unlock()
 
 	if active {
-		go m.pollCapturePane(ctx, tmuxName, ch)
+		go func() {
+			m.pollCapturePane(ctx, tmuxName, ch)
+			close(ch)
+		}()
 	} else {
 		outputLog := filepath.Join(m.outputDir, sessionID, "output.log")
-		go m.sendFileOnce(ctx, outputLog, ch)
+		go func() {
+			m.sendFileOnce(ctx, outputLog, ch)
+			close(ch)
+		}()
 	}
 
 	cancelFn := func() {
 		cancel()
-		close(ch)
 		m.outputMu.Lock()
 		subs := m.outputSubs[sessionID]
 		for i, s := range subs {
@@ -383,9 +388,10 @@ func (m *Manager) SendInput(sessionID, input string) error {
 		m.mu.RUnlock()
 		return fmt.Errorf("session %q is not active", sessionID)
 	}
+	tmuxName := sess.TmuxSession
 	m.mu.RUnlock()
 
-	return m.tmux.SendKeys(sess.TmuxSession, input)
+	return m.tmux.SendKeys(tmuxName, input)
 }
 
 func (m *Manager) Reconcile() error {
@@ -455,17 +461,19 @@ func (m *Manager) monitorSession(sess *Session) {
 			m.mu.RUnlock()
 			return
 		}
+		tmuxName := sess.TmuxSession
+		sessID := sess.ID
 		m.mu.RUnlock()
 
-		if m.tmux.IsPaneDead(sess.TmuxSession) || !m.tmux.HasSession(sess.TmuxSession) {
-			m.saveFinalScreen(sess)
-			m.tmux.KillSession(sess.TmuxSession)
+		if m.tmux.IsPaneDead(tmuxName) || !m.tmux.HasSession(tmuxName) {
+			m.saveFinalScreen(tmuxName, sessID)
+			m.tmux.KillSession(tmuxName)
 
 			m.mu.Lock()
 			now := time.Now()
 			sess.CompletedAt = &now
 
-			exitCode := m.detectExitCode(sess.ID)
+			exitCode := m.detectExitCode(sessID)
 			if exitCode != nil {
 				sess.ExitCode = exitCode
 				if *exitCode == 0 {
@@ -477,14 +485,14 @@ func (m *Manager) monitorSession(sess *Session) {
 			} else {
 				sess.Status = StatusCompleted
 			}
-			delete(m.sessions, sess.ID)
+			delete(m.sessions, sessID)
 			m.mu.Unlock()
 			m.handlePostSession(sess)
 			m.notifyStatus(sess)
 			return
 		}
 
-		waitingInput := m.checkWaitingInput(sess)
+		waitingInput := m.checkWaitingInput(tmuxName)
 		m.mu.Lock()
 		if sess.WaitingInput != waitingInput {
 			sess.WaitingInput = waitingInput
@@ -496,8 +504,8 @@ func (m *Manager) monitorSession(sess *Session) {
 	}
 }
 
-func (m *Manager) checkWaitingInput(sess *Session) bool {
-	pid, err := m.tmux.PanePID(sess.TmuxSession)
+func (m *Manager) checkWaitingInput(tmuxName string) bool {
+	pid, err := m.tmux.PanePID(tmuxName)
 	if err != nil {
 		return false
 	}
@@ -550,12 +558,12 @@ func (m *Manager) persist() {
 	m.store.Save(m.sessions)
 }
 
-func (m *Manager) saveFinalScreen(sess *Session) {
-	output, err := m.tmux.CapturePane(sess.TmuxSession)
+func (m *Manager) saveFinalScreen(tmuxName, sessionID string) {
+	output, err := m.tmux.CapturePane(tmuxName)
 	if err != nil {
 		return
 	}
-	screenFile := filepath.Join(m.outputDir, sess.ID, "screen.txt")
+	screenFile := filepath.Join(m.outputDir, sessionID, "screen.txt")
 	os.WriteFile(screenFile, []byte(output), 0644)
 }
 

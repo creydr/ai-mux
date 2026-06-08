@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"sync"
 )
 
 type Handler func(params json.RawMessage) (any, error)
@@ -14,6 +15,7 @@ type Server struct {
 	handlers map[string]Handler
 	reader   io.Reader
 	writer   io.Writer
+	wmu      sync.Mutex
 }
 
 func NewServer(reader io.Reader, writer io.Writer) *Server {
@@ -78,7 +80,9 @@ func (s *Server) writeResult(id *json.RawMessage, result any) {
 		log.Printf("error marshaling response: %v", err)
 		return
 	}
+	s.wmu.Lock()
 	fmt.Fprintf(s.writer, "%s\n", data)
+	s.wmu.Unlock()
 }
 
 func (s *Server) WriteNotification(method string, params any) {
@@ -92,7 +96,9 @@ func (s *Server) WriteNotification(method string, params any) {
 		log.Printf("error marshaling notification: %v", err)
 		return
 	}
+	s.wmu.Lock()
 	fmt.Fprintf(s.writer, "%s\n", data)
+	s.wmu.Unlock()
 }
 
 func (s *Server) writeError(id *json.RawMessage, code int, message string) {
@@ -106,5 +112,7 @@ func (s *Server) writeError(id *json.RawMessage, code int, message string) {
 		log.Printf("error marshaling error response: %v", err)
 		return
 	}
+	s.wmu.Lock()
 	fmt.Fprintf(s.writer, "%s\n", data)
+	s.wmu.Unlock()
 }

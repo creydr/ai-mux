@@ -101,7 +101,7 @@ func (t *tmuxCLI) PanePID(name string) (int, error) {
 }
 
 func (t *tmuxCLI) PipePaneToFile(name, path string) error {
-	pipeCmd := fmt.Sprintf("cat >> %s", path)
+	pipeCmd := fmt.Sprintf("cat >> '%s'", strings.ReplaceAll(path, "'", "'\\''"))
 	cmd := exec.Command("tmux", "pipe-pane", "-t", name, pipeCmd)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("tmux pipe-pane: %s: %w", strings.TrimSpace(string(out)), err)
