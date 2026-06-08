@@ -3,6 +3,7 @@ package desktop
 import (
 	"fmt"
 	"os/exec"
+	"runtime"
 
 	"github.com/creydr/ai-mux/internal/event"
 )
@@ -81,10 +82,16 @@ func formatNotification(ev event.Event) (string, string) {
 }
 
 func sendNotification(title, body string) error {
-	cmd := exec.Command("notify-send", "--app-name=ai-mux", title, body)
+	cmd := buildCommand(title, body)
 	return cmd.Run()
 }
 
-func BuildCommand(title, body string) *exec.Cmd {
-	return exec.Command("notify-send", "--app-name=ai-mux", title, body)
+func buildCommand(title, body string) *exec.Cmd {
+	switch runtime.GOOS {
+	case "darwin":
+		script := fmt.Sprintf(`display notification %q with title %q`, body, title)
+		return exec.Command("osascript", "-e", script)
+	default:
+		return exec.Command("notify-send", "--app-name=ai-mux", title, body)
+	}
 }

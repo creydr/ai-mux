@@ -4,9 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"os/exec"
-	"runtime"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/creydr/ai-mux/internal/action/browser"
 	"github.com/creydr/ai-mux/internal/event"
 	"github.com/creydr/ai-mux/internal/protocol"
 	"github.com/creydr/ai-mux/internal/provider"
@@ -109,16 +109,7 @@ func listenEventsCmd(conn protocol.Conn) tea.Cmd {
 
 func openBrowserCmd(url string) tea.Cmd {
 	return func() tea.Msg {
-		var cmd *exec.Cmd
-		switch runtime.GOOS {
-		case "darwin":
-			cmd = exec.Command("open", url)
-		case "windows":
-			cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", url)
-		default:
-			cmd = exec.Command("xdg-open", url)
-		}
-		cmd.Run()
+		browser.OpenCommand(url).Run()
 		return nil
 	}
 }

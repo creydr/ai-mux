@@ -71,11 +71,24 @@ func TestFormatNotification_Review(t *testing.T) {
 }
 
 func TestBuildCommand(t *testing.T) {
-	cmd := BuildCommand("Test Title", "Test Body")
-	if cmd.Args[0] != "notify-send" {
-		t.Errorf("expected notify-send, got %q", cmd.Args[0])
+	cmd := buildCommand("Test Title", "Test Body")
+	found := false
+	for _, arg := range cmd.Args {
+		if arg == "Test Title" || contains(arg, "Test Title") {
+			found = true
+			break
+		}
 	}
-	if cmd.Args[len(cmd.Args)-2] != "Test Title" {
-		t.Errorf("expected title in args: %v", cmd.Args)
+	if !found {
+		t.Errorf("expected title in command args: %v", cmd.Args)
 	}
+}
+
+func contains(s, sub string) bool {
+	for i := 0; i <= len(s)-len(sub); i++ {
+		if s[i:i+len(sub)] == sub {
+			return true
+		}
+	}
+	return false
 }
