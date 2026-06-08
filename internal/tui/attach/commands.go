@@ -2,6 +2,7 @@ package attach
 
 import (
 	"encoding/json"
+	"fmt"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/creydr/ai-mux/internal/protocol"
@@ -26,7 +27,9 @@ func fetchItemCmd(conn protocol.Conn, ref Ref) tea.Cmd {
 			return errMsg{err: err}
 		}
 		var item provider.Item
-		json.Unmarshal(resp.Payload, &item)
+		if err := json.Unmarshal(resp.Payload, &item); err != nil {
+			return errMsg{err: fmt.Errorf("parsing item: %w", err)}
+		}
 		return itemLoadedMsg{item: &item}
 	}
 }
@@ -48,7 +51,9 @@ func fetchReviewsCmd(conn protocol.Conn, ref Ref) tea.Cmd {
 			return errMsg{err: err}
 		}
 		var reviews []provider.Review
-		json.Unmarshal(resp.Payload, &reviews)
+		if err := json.Unmarshal(resp.Payload, &reviews); err != nil {
+			return errMsg{err: fmt.Errorf("parsing reviews: %w", err)}
+		}
 		return reviewsLoadedMsg{reviews: reviews}
 	}
 }
@@ -70,7 +75,9 @@ func fetchCommentsCmd(conn protocol.Conn, ref Ref) tea.Cmd {
 			return errMsg{err: err}
 		}
 		var comments []provider.Comment
-		json.Unmarshal(resp.Payload, &comments)
+		if err := json.Unmarshal(resp.Payload, &comments); err != nil {
+			return errMsg{err: fmt.Errorf("parsing comments: %w", err)}
+		}
 		return commentsLoadedMsg{comments: comments}
 	}
 }

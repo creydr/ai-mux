@@ -87,12 +87,16 @@ func (a *Agent) handleSessionNew(params json.RawMessage) (any, error) {
 	}
 	if resp.Type == protocol.MsgError {
 		var errPayload map[string]string
-		json.Unmarshal(resp.Payload, &errPayload)
+		if err := json.Unmarshal(resp.Payload, &errPayload); err != nil {
+			return nil, fmt.Errorf("daemon error (unparseable response)")
+		}
 		return nil, fmt.Errorf("%s", errPayload["error"])
 	}
 
 	var sess protocol.SessionPayload
-	json.Unmarshal(resp.Payload, &sess)
+	if err := json.Unmarshal(resp.Payload, &sess); err != nil {
+		return nil, fmt.Errorf("parsing session response: %w", err)
+	}
 
 	return SessionNewResult{
 		SessionID: sess.ID,
@@ -118,7 +122,9 @@ func (a *Agent) handleSessionList(params json.RawMessage) (any, error) {
 	}
 
 	var payload protocol.SessionListPayload
-	json.Unmarshal(resp.Payload, &payload)
+	if err := json.Unmarshal(resp.Payload, &payload); err != nil {
+		return nil, fmt.Errorf("parsing session list: %w", err)
+	}
 
 	sessions := make([]SessionInfo, len(payload.Sessions))
 	for i, s := range payload.Sessions {
@@ -163,7 +169,9 @@ func (a *Agent) handleSessionStop(params json.RawMessage) (any, error) {
 	}
 	if resp.Type == protocol.MsgError {
 		var errPayload map[string]string
-		json.Unmarshal(resp.Payload, &errPayload)
+		if err := json.Unmarshal(resp.Payload, &errPayload); err != nil {
+			return nil, fmt.Errorf("daemon error (unparseable response)")
+		}
 		return nil, fmt.Errorf("%s", errPayload["error"])
 	}
 
@@ -196,7 +204,9 @@ func (a *Agent) handleSessionPrompt(params json.RawMessage) (any, error) {
 	}
 	if resp.Type == protocol.MsgError {
 		var errPayload map[string]string
-		json.Unmarshal(resp.Payload, &errPayload)
+		if err := json.Unmarshal(resp.Payload, &errPayload); err != nil {
+			return nil, fmt.Errorf("daemon error (unparseable response)")
+		}
 		return nil, fmt.Errorf("%s", errPayload["error"])
 	}
 
@@ -231,7 +241,9 @@ func (a *Agent) handleSessionAttach(params json.RawMessage) (any, error) {
 	}
 	if resp.Type == protocol.MsgError {
 		var errPayload map[string]string
-		json.Unmarshal(resp.Payload, &errPayload)
+		if err := json.Unmarshal(resp.Payload, &errPayload); err != nil {
+			return nil, fmt.Errorf("daemon error (unparseable response)")
+		}
 		return nil, fmt.Errorf("%s", errPayload["error"])
 	}
 
@@ -275,6 +287,8 @@ func (a *Agent) handleItemsList(params json.RawMessage) (any, error) {
 	}
 
 	var items protocol.ItemsPayload
-	json.Unmarshal(resp.Payload, &items)
+	if err := json.Unmarshal(resp.Payload, &items); err != nil {
+		return nil, fmt.Errorf("parsing items list: %w", err)
+	}
 	return items, nil
 }

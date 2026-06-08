@@ -23,7 +23,9 @@ func fetchItemsCmd(conn protocol.Conn, limit int) tea.Cmd {
 			return errMsg{err: err}
 		}
 		var issues protocol.ItemsPayload
-		json.Unmarshal(issueResp.Payload, &issues)
+		if err := json.Unmarshal(issueResp.Payload, &issues); err != nil {
+			return errMsg{err: fmt.Errorf("parsing issues: %w", err)}
+		}
 
 		prMsg, _ := protocol.NewRequest(protocol.MsgListPRs, "dash-prs", protocol.ListPayload{Limit: limit})
 		if err := conn.Send(prMsg); err != nil {
@@ -34,7 +36,9 @@ func fetchItemsCmd(conn protocol.Conn, limit int) tea.Cmd {
 			return errMsg{err: err}
 		}
 		var prs protocol.ItemsPayload
-		json.Unmarshal(prResp.Payload, &prs)
+		if err := json.Unmarshal(prResp.Payload, &prs); err != nil {
+			return errMsg{err: fmt.Errorf("parsing PRs: %w", err)}
+		}
 
 		return itemsReceivedMsg{
 			issues: issues.Items,
@@ -61,7 +65,9 @@ func expandRepoCmd(conn protocol.Conn, repo string, itemType provider.ItemType, 
 			return errMsg{err: err}
 		}
 		var payload protocol.ItemsPayload
-		json.Unmarshal(resp.Payload, &payload)
+		if err := json.Unmarshal(resp.Payload, &payload); err != nil {
+			return errMsg{err: fmt.Errorf("parsing items: %w", err)}
+		}
 
 		return repoExpandedMsg{
 			repo:           repo,
@@ -80,7 +86,9 @@ func listenEventsCmd(conn protocol.Conn) tea.Cmd {
 		}
 		if msg.Type == protocol.MsgEvent {
 			var ev event.Event
-			json.Unmarshal(msg.Payload, &ev)
+			if err := json.Unmarshal(msg.Payload, &ev); err != nil {
+				return errMsg{err: fmt.Errorf("parsing event: %w", err)}
+			}
 			return eventReceivedMsg{event: ev}
 		}
 		return nil
@@ -117,7 +125,9 @@ func fetchSessionsCmd(conn protocol.Conn) tea.Cmd {
 			return sessionsReceivedMsg{}
 		}
 		var payload protocol.SessionListPayload
-		json.Unmarshal(resp.Payload, &payload)
+		if err := json.Unmarshal(resp.Payload, &payload); err != nil {
+			return errMsg{err: fmt.Errorf("parsing sessions: %w", err)}
+		}
 		return sessionsReceivedMsg{sessions: payload.Sessions}
 	}
 }
@@ -143,11 +153,15 @@ func spawnSessionCmd(conn protocol.Conn, repo string, number int, itemType, agen
 		}
 		if resp.Type == protocol.MsgError {
 			var errPayload map[string]string
-			json.Unmarshal(resp.Payload, &errPayload)
+			if err := json.Unmarshal(resp.Payload, &errPayload); err != nil {
+				return errMsg{err: fmt.Errorf("parsing error response: %w", err)}
+			}
 			return statusMsg{text: "Error: " + errPayload["error"]}
 		}
 		var sess protocol.SessionPayload
-		json.Unmarshal(resp.Payload, &sess)
+		if err := json.Unmarshal(resp.Payload, &sess); err != nil {
+			return errMsg{err: fmt.Errorf("parsing session: %w", err)}
+		}
 		return sessionSpawnedMsg{session: sess}
 	}
 }
@@ -166,7 +180,9 @@ func stopSessionCmd(conn protocol.Conn, sessionID string) tea.Cmd {
 		}
 		if resp.Type == protocol.MsgError {
 			var errPayload map[string]string
-			json.Unmarshal(resp.Payload, &errPayload)
+			if err := json.Unmarshal(resp.Payload, &errPayload); err != nil {
+				return errMsg{err: fmt.Errorf("parsing error response: %w", err)}
+			}
 			return statusMsg{text: "Error: " + errPayload["error"]}
 		}
 		return sessionStoppedMsg{sessionID: sessionID}
@@ -187,7 +203,9 @@ func attachSessionCmd(conn protocol.Conn, sessionID string) tea.Cmd {
 		}
 		if resp.Type == protocol.MsgError {
 			var errPayload map[string]string
-			json.Unmarshal(resp.Payload, &errPayload)
+			if err := json.Unmarshal(resp.Payload, &errPayload); err != nil {
+				return errMsg{err: fmt.Errorf("parsing error response: %w", err)}
+			}
 			return statusMsg{text: "Error: " + errPayload["error"]}
 		}
 		return sessionAttachedMsg{}
@@ -219,7 +237,9 @@ func listenAttachOutputCmd(conn protocol.Conn) tea.Cmd {
 		}
 		if msg.Type == protocol.MsgSessionOutput {
 			var payload protocol.SessionOutputPayload
-			json.Unmarshal(msg.Payload, &payload)
+			if err := json.Unmarshal(msg.Payload, &payload); err != nil {
+				return attachNonOutputMsg{}
+			}
 			return sessionOutputMsg{sessionID: payload.SessionID, data: payload.Data}
 		}
 		return attachNonOutputMsg{}
