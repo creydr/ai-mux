@@ -13,11 +13,20 @@ const (
 	MsgExecuteAction MessageType = "execute_action"
 	MsgGetStatus     MessageType = "get_status"
 
-	MsgEvent        MessageType = "event"
-	MsgStateUpdate  MessageType = "state_update"
-	MsgActionResult MessageType = "action_result"
-	MsgResponse     MessageType = "response"
-	MsgError        MessageType = "error"
+	MsgSessionSpawn  MessageType = "session_spawn"
+	MsgSessionList   MessageType = "session_list"
+	MsgSessionAttach MessageType = "session_attach"
+	MsgSessionDetach MessageType = "session_detach"
+	MsgSessionInput  MessageType = "session_input"
+	MsgSessionStop   MessageType = "session_stop"
+
+	MsgEvent         MessageType = "event"
+	MsgStateUpdate   MessageType = "state_update"
+	MsgActionResult  MessageType = "action_result"
+	MsgSessionOutput MessageType = "session_output"
+	MsgSessionStatus MessageType = "session_status"
+	MsgResponse      MessageType = "response"
+	MsgError         MessageType = "error"
 )
 
 type Message struct {

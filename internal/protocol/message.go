@@ -80,3 +80,46 @@ type StatusPayload struct {
 type ItemsPayload struct {
 	Items []provider.Item `json:"items"`
 }
+
+type SessionSpawnPayload struct {
+	Repo     string `json:"repo"`
+	Number   int    `json:"number"`
+	ItemType string `json:"item_type"`
+	Agent    string `json:"agent"`
+}
+
+type SessionPayload struct {
+	ID           string `json:"id"`
+	Repo         string `json:"repo"`
+	Number       int    `json:"number"`
+	ItemType     string `json:"item_type"`
+	Agent        string `json:"agent"`
+	Status       string `json:"status"`
+	WaitingInput bool   `json:"waiting_input"`
+	Worktree     string `json:"worktree"`
+	CreatedAt    string `json:"created_at"`
+}
+
+type SessionListPayload struct {
+	Sessions []SessionPayload `json:"sessions"`
+}
+
+type SessionOutputPayload struct {
+	SessionID string `json:"session_id"`
+	Data      string `json:"data"`
+}
+
+type SessionInputPayload struct {
+	SessionID string `json:"session_id"`
+	Input     string `json:"input"`
+}
+
+type SessionIDPayload struct {
+	SessionID string `json:"session_id"`
+}
+
+type ActionResultPayload struct {
+	Success bool   `json:"success"`
+	Message string `json:"message"`
+	Action  string `json:"action"`
+}
