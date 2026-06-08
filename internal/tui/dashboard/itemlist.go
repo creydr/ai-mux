@@ -3,7 +3,9 @@ package dashboard
 import (
 	"fmt"
 	"sort"
+	"time"
 
+	"github.com/creydr/ai-mux/internal/protocol"
 	"github.com/creydr/ai-mux/internal/provider"
 )
 
@@ -45,8 +47,17 @@ func buildVisibleRows(items []provider.Item, itemsPerRepo int, expanded map[stri
 	return rows
 }
 
-func buildContentLines(items []provider.Item, cursor, width, itemsPerRepo int, expanded map[string]bool, selectedRepo string, fullLoaded map[string]bool) ([]string, int) {
+func buildContentLines(items []provider.Item, cursor, width, itemsPerRepo int, expanded map[string]bool, selectedRepo string, fullLoaded map[string]bool, sessions []protocol.SessionPayload) ([]string, int) {
 	rows := buildVisibleRows(items, itemsPerRepo, expanded, selectedRepo, fullLoaded)
+
+	sessionMap := make(map[string]*protocol.SessionPayload)
+	for i := range sessions {
+		s := &sessions[i]
+		key := fmt.Sprintf("%s#%d", s.Repo, s.Number)
+		if s.Status == "running" || s.Status == "pending" || s.Status == "completed" {
+			sessionMap[key] = s
+		}
+	}
 
 	var lines []string
 	cursorLine := 0
@@ -64,6 +75,10 @@ func buildContentLines(items []provider.Item, cursor, width, itemsPerRepo int, e
 				prevRepo = repo
 			}
 			text := formatItem(*r.item, width)
+			key := fmt.Sprintf("%s#%d", r.item.Repo.String(), r.item.Number)
+			if sess, ok := sessionMap[key]; ok {
+				text += " " + sessionBadge(sess.Status, sess.WaitingInput)
+			}
 			if rowIdx == cursor {
 				cursorLine = len(lines)
 				lines = append(lines, selectedItemStyle.Width(width).Render(text))
@@ -86,6 +101,51 @@ func buildContentLines(items []provider.Item, cursor, width, itemsPerRepo int, e
 				lines = append(lines, normalItemStyle.Render(label))
 			}
 			rowIdx++
+		}
+	}
+
+	return lines, cursorLine
+}
+
+func sessionBadge(status string, waitingInput bool) string {
+	if waitingInput {
+		return sessionWaitingStyle.Render("[waiting]")
+	}
+	switch status {
+	case "running", "pending":
+		return sessionRunningStyle.Render("[running]")
+	case "completed":
+		return sessionDoneStyle.Render("[done]")
+	case "failed":
+		return sessionFailedStyle.Render("[failed]")
+	case "stopped":
+		return sessionDoneStyle.Render("[stopped]")
+	default:
+		return ""
+	}
+}
+
+func buildSessionLines(sessions []protocol.SessionPayload, cursor, width int) ([]string, int) {
+	if len(sessions) == 0 {
+		return []string{statusBarStyle.Render("  No sessions")}, 0
+	}
+
+	var lines []string
+	cursorLine := 0
+
+	for i, s := range sessions {
+		badge := sessionBadge(s.Status, s.WaitingInput)
+		elapsed := ""
+		if t, err := time.Parse(time.RFC3339, s.CreatedAt); err == nil {
+			elapsed = time.Since(t).Truncate(time.Second).String()
+		}
+
+		text := fmt.Sprintf("  %-16s %s#%-5d %-10s %s  %s", s.ID, s.Repo, s.Number, s.Agent, badge, elapsed)
+		if i == cursor {
+			cursorLine = len(lines)
+			lines = append(lines, selectedItemStyle.Width(width).Render(text))
+		} else {
+			lines = append(lines, normalItemStyle.Render(text))
 		}
 	}
 

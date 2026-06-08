@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
@@ -15,6 +16,13 @@ import (
 
 const headerLines = 6
 const expandChunkSize = 20
+
+type viewState int
+
+const (
+	viewOverview viewState = iota
+	viewAttach
+)
 
 type panel int
 
@@ -47,9 +55,23 @@ type Model struct {
 	issueBadge int
 	prBadge    int
 	err        error
+
+	sessions      []protocol.SessionPayload
+	sessionCursor int
+	sessionBadge  int
+	defaultAgent  string
+
+	statusText   string
+	statusTickID int
+
+	view            viewState
+	attachedSession *protocol.SessionPayload
+	attachOutput    []string
+	attachViewport  viewport.Model
+	inputBuffer     string
 }
 
-func New(conn protocol.Conn, itemsPerRepo int) Model {
+func New(conn protocol.Conn, itemsPerRepo int, defaultAgent string) Model {
 	if itemsPerRepo <= 0 {
 		itemsPerRepo = 3
 	}
@@ -57,14 +79,20 @@ func New(conn protocol.Conn, itemsPerRepo int) Model {
 	vp.KeyMap = viewport.KeyMap{}
 	vp.FillHeight = true
 	vp.MouseWheelEnabled = true
+	avp := viewport.New()
+	avp.KeyMap = viewport.KeyMap{}
+	avp.FillHeight = true
+	avp.MouseWheelEnabled = true
 	return Model{
-		conn:         conn,
-		loading:      conn != nil,
-		focusPanel:   panelItems,
-		expanded:     make(map[string]bool),
-		fullLoaded:   make(map[string]bool),
-		itemsPerRepo: itemsPerRepo,
-		viewport:     vp,
+		conn:           conn,
+		loading:        conn != nil,
+		focusPanel:     panelItems,
+		expanded:       make(map[string]bool),
+		fullLoaded:     make(map[string]bool),
+		itemsPerRepo:   itemsPerRepo,
+		viewport:       vp,
+		defaultAgent:   defaultAgent,
+		attachViewport: avp,
 	}
 }
 
@@ -72,7 +100,9 @@ func (m Model) Init() tea.Cmd {
 	if m.conn == nil {
 		return nil
 	}
-	return fetchItemsCmd(m.conn, m.itemsPerRepo)
+	return tea.Batch(
+		fetchItemsCmd(m.conn, m.itemsPerRepo),
+	)
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -81,12 +111,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleKey(msg)
 	case tea.MouseMsg:
 		var cmd tea.Cmd
-		m.viewport, cmd = m.viewport.Update(msg)
+		if m.view == viewAttach {
+			m.attachViewport, cmd = m.attachViewport.Update(msg)
+		} else {
+			m.viewport, cmd = m.viewport.Update(msg)
+		}
 		return m, cmd
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
-		m.rebuildViewport()
+		if m.view == viewAttach {
+			m.rebuildAttachViewport()
+		} else {
+			m.rebuildViewport()
+		}
 		return m, nil
 	case itemsReceivedMsg:
 		m.issues = msg.issues
@@ -116,16 +154,65 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		return m, fetchItemsCmd(m.conn, m.itemsPerRepo)
+	case sessionsReceivedMsg:
+		m.sessions = msg.sessions
+		m.rebuildViewport()
+		return m, nil
+	case sessionSpawnedMsg:
+		m.sessions = append(m.sessions, msg.session)
+		m.statusText = fmt.Sprintf("Session started for %s#%d", msg.session.Repo, msg.session.Number)
+		m.rebuildViewport()
+		return m, m.scheduleStatusClear()
+	case sessionStoppedMsg:
+		for i, s := range m.sessions {
+			if s.ID == msg.sessionID {
+				m.sessions[i].Status = "stopped"
+				break
+			}
+		}
+		m.statusText = "Session stopped"
+		m.rebuildViewport()
+		return m, m.scheduleStatusClear()
+	case statusMsg:
+		m.statusText = msg.text
+		return m, m.scheduleStatusClear()
+	case statusTickMsg:
+		if msg.id == m.statusTickID && time.Now().After(msg.due) {
+			m.statusText = ""
+		}
+		return m, nil
+	case sessionAttachedMsg:
+		m.view = viewAttach
+		m.attachOutput = nil
+		m.inputBuffer = ""
+		m.rebuildAttachViewport()
+		return m, listenAttachOutputCmd(m.conn)
+	case sessionOutputMsg:
+		if m.view == viewAttach {
+			m.attachOutput = append(m.attachOutput, msg.data)
+			m.rebuildAttachViewport()
+			return m, listenAttachOutputCmd(m.conn)
+		}
+		return m, nil
+	case attachNonOutputMsg:
+		if m.view == viewAttach {
+			return m, listenAttachOutputCmd(m.conn)
+		}
+		return m, nil
 	}
 	return m, nil
 }
 
 func (m Model) View() tea.View {
+	if m.view == viewAttach {
+		return m.renderAttachView()
+	}
+
 	var b strings.Builder
 
 	b.WriteString(titleStyle.Render("  ai-mux"))
 	b.WriteString("\n\n")
-	b.WriteString(renderTabs(m.activeTab, m.issueBadge, m.prBadge))
+	b.WriteString(renderTabs(m.activeTab, m.issueBadge, m.prBadge, m.sessionBadge))
 	b.WriteString("\n")
 
 	if m.err != nil {
@@ -141,6 +228,8 @@ func (m Model) View() tea.View {
 
 	if m.loading && len(m.issues) == 0 && len(m.prs) == 0 {
 		b.WriteString(statusBarStyle.Render("  Loading..."))
+	} else if m.activeTab == tabSessions {
+		b.WriteString(m.viewport.View())
 	} else {
 		panelStr := renderSidePanel(m.repos, m.repoCursor, m.selectedRepo, m.focusPanel == panelRepos, vpHeight)
 
@@ -156,7 +245,11 @@ func (m Model) View() tea.View {
 	}
 
 	b.WriteString("\n")
-	b.WriteString(statusBarStyle.Render("  h/l: panel | j/k: navigate | o: open | tab: switch | r: refresh | q: quit"))
+	if m.statusText != "" {
+		b.WriteString(sessionStatusStyle.Render("  " + m.statusText))
+	} else {
+		b.WriteString(statusBarStyle.Render("  " + m.statusBarText()))
+	}
 
 	v := tea.NewView(b.String())
 	v.AltScreen = true
@@ -177,18 +270,26 @@ func (m *Model) rebuildViewport() {
 	if width == 0 {
 		width = 80
 	}
-	listWidth := width - panelWidth
-	if listWidth < 20 {
-		listWidth = 20
+
+	if m.activeTab == tabSessions {
+		m.viewport.SetWidth(width)
+		m.viewport.SetHeight(vpHeight)
+		lines, cursorLine := buildSessionLines(m.sessions, m.sessionCursor, width)
+		m.viewport.SetContentLines(lines)
+		m.cursorLine = cursorLine
+	} else {
+		listWidth := width - panelWidth
+		if listWidth < 20 {
+			listWidth = 20
+		}
+		m.viewport.SetWidth(listWidth)
+		m.viewport.SetHeight(vpHeight)
+
+		items := m.currentItems()
+		lines, cursorLine := buildContentLines(items, m.cursor, listWidth, m.itemsPerRepo, m.expanded, m.selectedRepo, m.fullLoaded, m.sessions)
+		m.viewport.SetContentLines(lines)
+		m.cursorLine = cursorLine
 	}
-
-	m.viewport.SetWidth(listWidth)
-	m.viewport.SetHeight(vpHeight)
-
-	items := m.currentItems()
-	lines, cursorLine := buildContentLines(items, m.cursor, listWidth, m.itemsPerRepo, m.expanded, m.selectedRepo, m.fullLoaded)
-	m.viewport.SetContentLines(lines)
-	m.cursorLine = cursorLine
 
 	if m.cursorLine < m.viewport.YOffset() {
 		m.viewport.SetYOffset(m.cursorLine)
@@ -198,6 +299,10 @@ func (m *Model) rebuildViewport() {
 }
 
 func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	if m.view == viewAttach {
+		return m.handleAttachKey(msg)
+	}
+
 	switch {
 	case msg.Code == 'h' || msg.Code == tea.KeyLeft:
 		m.focusPanel = panelRepos
@@ -208,16 +313,29 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case msg.Code == tea.KeyTab:
 		m.activeTab = (m.activeTab + 1) % tab(len(tabNames))
 		m.cursor = 0
+		m.sessionCursor = 0
 		m.expanded = make(map[string]bool)
-		if m.activeTab == tabIssues {
+		switch m.activeTab {
+		case tabIssues:
 			m.issueBadge = 0
-		} else {
+		case tabPRs:
 			m.prBadge = 0
+		case tabSessions:
+			m.sessionBadge = 0
+			if m.conn != nil {
+				m.rebuildViewport()
+				return m, fetchSessionsCmd(m.conn)
+			}
 		}
 		m.rebuildViewport()
 		return m, nil
 	case msg.Code == 'j' || msg.Code == tea.KeyDown:
-		if m.focusPanel == panelRepos {
+		if m.activeTab == tabSessions {
+			if m.sessionCursor < len(m.sessions)-1 {
+				m.sessionCursor++
+			}
+			m.rebuildViewport()
+		} else if m.focusPanel == panelRepos {
 			maxIdx := len(m.repos)
 			if m.repoCursor < maxIdx {
 				m.repoCursor++
@@ -231,7 +349,12 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case msg.Code == 'k' || msg.Code == tea.KeyUp:
-		if m.focusPanel == panelRepos {
+		if m.activeTab == tabSessions {
+			if m.sessionCursor > 0 {
+				m.sessionCursor--
+			}
+			m.rebuildViewport()
+		} else if m.focusPanel == panelRepos {
 			if m.repoCursor > 0 {
 				m.repoCursor--
 			}
@@ -243,6 +366,18 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case msg.Code == tea.KeyEnter:
+		if m.activeTab == tabSessions {
+			if m.sessionCursor >= 0 && m.sessionCursor < len(m.sessions) {
+				sess := m.sessions[m.sessionCursor]
+				if sess.Status == "running" || sess.Status == "pending" {
+					m.attachedSession = &sess
+					if m.conn != nil {
+						return m, attachSessionCmd(m.conn, sess.ID)
+					}
+				}
+			}
+			return m, nil
+		}
 		if m.focusPanel == panelRepos {
 			if m.repoCursor == 0 {
 				m.selectedRepo = ""
@@ -278,10 +413,46 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return m, openBrowserCmd(item.URL)
 		}
 		return m, nil
-	case msg.Code == 'o':
+	case msg.Code == 'o' || msg.Code == 'b':
 		item := m.selectedItem()
 		if item != nil && item.URL != "" {
 			return m, openBrowserCmd(item.URL)
+		}
+		return m, nil
+	case msg.Code == 'c':
+		if m.activeTab == tabSessions {
+			return m, nil
+		}
+		if m.defaultAgent == "" {
+			m.statusText = "No agents configured"
+			return m, m.scheduleStatusClear()
+		}
+		item := m.selectedItem()
+		if item != nil && m.conn != nil {
+			itemType := "issue"
+			if m.activeTab == tabPRs {
+				itemType = "pr"
+			}
+			return m, spawnSessionCmd(m.conn, item.Repo.String(), item.Number, itemType, m.defaultAgent)
+		}
+		return m, nil
+	case msg.Code == 's':
+		if m.activeTab == tabSessions {
+			if m.sessionCursor >= 0 && m.sessionCursor < len(m.sessions) {
+				sess := m.sessions[m.sessionCursor]
+				if sess.Status == "running" || sess.Status == "pending" {
+					return m, stopSessionCmd(m.conn, sess.ID)
+				}
+			}
+		} else {
+			item := m.selectedItem()
+			if item != nil {
+				for _, sess := range m.sessions {
+					if sess.Repo == item.Repo.String() && sess.Number == item.Number && (sess.Status == "running" || sess.Status == "pending") {
+						return m, stopSessionCmd(m.conn, sess.ID)
+					}
+				}
+			}
 		}
 		return m, nil
 	case msg.Code == 'r':
@@ -429,4 +600,142 @@ func (m Model) updateItem(items []provider.Item, updated provider.Item) {
 			return
 		}
 	}
+}
+
+func (m *Model) scheduleStatusClear() tea.Cmd {
+	m.statusTickID++
+	id := m.statusTickID
+	due := time.Now().Add(5 * time.Second)
+	return tea.Tick(5*time.Second, func(t time.Time) tea.Msg {
+		return statusTickMsg{id: id, due: due}
+	})
+}
+
+func (m Model) statusBarText() string {
+	switch m.activeTab {
+	case tabSessions:
+		return "enter: attach | s: stop | j/k: nav | tab: switch | q: quit"
+	default:
+		return "c: agent | b: browser | s: stop | j/k: nav | tab: switch | r: refresh | q: quit"
+	}
+}
+
+func (m Model) sessionForItem(repo string, number int) *protocol.SessionPayload {
+	for i := range m.sessions {
+		s := &m.sessions[i]
+		if s.Repo == repo && s.Number == number {
+			return s
+		}
+	}
+	return nil
+}
+
+func (m Model) handleAttachKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	switch {
+	case msg.Code == tea.KeyEscape:
+		m.view = viewOverview
+		m.attachedSession = nil
+		m.attachOutput = nil
+		m.inputBuffer = ""
+		m.rebuildViewport()
+		if m.conn != nil {
+			return m, detachSessionCmd(m.conn)
+		}
+		return m, nil
+	case msg.Code == tea.KeyEnter:
+		if m.inputBuffer != "" && m.attachedSession != nil {
+			input := m.inputBuffer
+			m.inputBuffer = ""
+			if m.conn != nil {
+				return m, sendInputCmd(m.conn, m.attachedSession.ID, input)
+			}
+		}
+		return m, nil
+	case msg.Code == tea.KeyBackspace:
+		if len(m.inputBuffer) > 0 {
+			m.inputBuffer = m.inputBuffer[:len(m.inputBuffer)-1]
+		}
+		return m, nil
+	case msg.Code == tea.KeyPgUp:
+		m.attachViewport.SetYOffset(m.attachViewport.YOffset() - 10)
+		return m, nil
+	case msg.Code == tea.KeyPgDown:
+		m.attachViewport.SetYOffset(m.attachViewport.YOffset() + 10)
+		return m, nil
+	default:
+		if msg.Text != "" {
+			m.inputBuffer += msg.Text
+		}
+		return m, nil
+	}
+}
+
+func (m Model) renderAttachView() tea.View {
+	var b strings.Builder
+	width := m.width
+	if width == 0 {
+		width = 80
+	}
+
+	header := "  Session: "
+	if m.attachedSession != nil {
+		badge := sessionBadge(m.attachedSession.Status, m.attachedSession.WaitingInput)
+		header += fmt.Sprintf("%s  %s#%d  %s  %s",
+			m.attachedSession.ID,
+			m.attachedSession.Repo,
+			m.attachedSession.Number,
+			m.attachedSession.Agent,
+			badge,
+		)
+	}
+	b.WriteString(attachHeaderStyle.Render(header))
+	b.WriteString("\n")
+	b.WriteString(attachSeparatorStyle.Render(strings.Repeat("─", width)))
+	b.WriteString("\n")
+
+	b.WriteString(m.attachViewport.View())
+
+	b.WriteString("\n")
+	b.WriteString(attachSeparatorStyle.Render(strings.Repeat("─", width)))
+	b.WriteString("\n")
+
+	inputLine := "  > " + m.inputBuffer + "█"
+	helpText := "esc: detach | enter: send"
+	padding := width - len(inputLine) - len(helpText) - 2
+	if padding < 2 {
+		padding = 2
+	}
+	b.WriteString(attachInputStyle.Render(inputLine))
+	b.WriteString(strings.Repeat(" ", padding))
+	b.WriteString(statusBarStyle.Render(helpText))
+
+	v := tea.NewView(b.String())
+	v.AltScreen = true
+	return v
+}
+
+func (m *Model) rebuildAttachViewport() {
+	width := m.width
+	if width == 0 {
+		width = 80
+	}
+	vpHeight := m.height - 4
+	if vpHeight < 5 {
+		vpHeight = 20
+	}
+
+	m.attachViewport.SetWidth(width)
+	m.attachViewport.SetHeight(vpHeight)
+
+	var lines []string
+	for _, chunk := range m.attachOutput {
+		chunkLines := strings.Split(chunk, "\n")
+		lines = append(lines, chunkLines...)
+	}
+	if len(lines) == 0 {
+		lines = []string{statusBarStyle.Render("  Waiting for output...")}
+	}
+
+	m.attachViewport.SetContentLines(lines)
+	m.attachViewport.GotoBottom()
 }

@@ -7,6 +7,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/creydr/ai-mux/internal/event"
+	"github.com/creydr/ai-mux/internal/protocol"
 	"github.com/creydr/ai-mux/internal/provider"
 )
 
@@ -42,7 +43,7 @@ func multiRepoItems(perRepo int) []provider.Item {
 }
 
 func TestModel_InitWithoutConn(t *testing.T) {
-	m := New(nil, 3)
+	m := New(nil, 3, "")
 	cmd := m.Init()
 	if cmd != nil {
 		t.Error("Init should return nil without a connection")
@@ -53,7 +54,7 @@ func TestModel_InitWithoutConn(t *testing.T) {
 }
 
 func TestModel_LoadingState(t *testing.T) {
-	m := New(nil, 3)
+	m := New(nil, 3, "")
 	m.loading = true
 
 	view := m.View()
@@ -75,7 +76,7 @@ func TestModel_LoadingState(t *testing.T) {
 }
 
 func TestModel_LoadingClearedOnError(t *testing.T) {
-	m := New(nil, 3)
+	m := New(nil, 3, "")
 	m.loading = true
 
 	updated, _ := m.Update(errMsg{err: fmt.Errorf("fail")})
@@ -87,7 +88,7 @@ func TestModel_LoadingClearedOnError(t *testing.T) {
 }
 
 func TestModel_TabSwitch(t *testing.T) {
-	m := New(nil, 3)
+	m := New(nil, 3, "")
 	issues, prs := testItems()
 	m.issues = issues
 	m.prs = prs
@@ -109,13 +110,20 @@ func TestModel_TabSwitch(t *testing.T) {
 	updated, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyTab})
 	m = updated.(Model)
 
+	if m.activeTab != tabSessions {
+		t.Error("should switch to sessions tab")
+	}
+
+	updated, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyTab})
+	m = updated.(Model)
+
 	if m.activeTab != tabIssues {
 		t.Error("should wrap back to issues tab")
 	}
 }
 
 func TestModel_NavigateDown(t *testing.T) {
-	m := New(nil, 3)
+	m := New(nil, 3, "")
 	issues, _ := testItems()
 	m.issues = issues
 
@@ -135,7 +143,7 @@ func TestModel_NavigateDown(t *testing.T) {
 }
 
 func TestModel_NavigateUp(t *testing.T) {
-	m := New(nil, 3)
+	m := New(nil, 3, "")
 	issues, _ := testItems()
 	m.issues = issues
 	m.cursor = 1
@@ -156,7 +164,7 @@ func TestModel_NavigateUp(t *testing.T) {
 }
 
 func TestModel_NavigateWithArrowKeys(t *testing.T) {
-	m := New(nil, 3)
+	m := New(nil, 3, "")
 	issues, _ := testItems()
 	m.issues = issues
 
@@ -174,7 +182,7 @@ func TestModel_NavigateWithArrowKeys(t *testing.T) {
 }
 
 func TestModel_ItemsReceived(t *testing.T) {
-	m := New(nil, 3)
+	m := New(nil, 3, "")
 	issues, prs := testItems()
 
 	updated, _ := m.Update(itemsReceivedMsg{issues: issues, prs: prs})
@@ -192,7 +200,7 @@ func TestModel_ItemsReceived(t *testing.T) {
 }
 
 func TestModel_EventReceived_NewIssue(t *testing.T) {
-	m := New(nil, 3)
+	m := New(nil, 3, "")
 	m.activeTab = tabPRs
 
 	updated, _ := m.Update(eventReceivedMsg{event: event.Event{
@@ -210,7 +218,7 @@ func TestModel_EventReceived_NewIssue(t *testing.T) {
 }
 
 func TestModel_EventReceived_NewPR(t *testing.T) {
-	m := New(nil, 3)
+	m := New(nil, 3, "")
 	m.activeTab = tabIssues
 
 	updated, _ := m.Update(eventReceivedMsg{event: event.Event{
@@ -228,7 +236,7 @@ func TestModel_EventReceived_NewPR(t *testing.T) {
 }
 
 func TestModel_EventReceived_NoBadgeOnActiveTab(t *testing.T) {
-	m := New(nil, 3)
+	m := New(nil, 3, "")
 	m.activeTab = tabIssues
 
 	updated, _ := m.Update(eventReceivedMsg{event: event.Event{
@@ -243,7 +251,7 @@ func TestModel_EventReceived_NoBadgeOnActiveTab(t *testing.T) {
 }
 
 func TestModel_BadgeClearsOnTabSwitch(t *testing.T) {
-	m := New(nil, 3)
+	m := New(nil, 3, "")
 	m.activeTab = tabIssues
 	m.prBadge = 3
 
@@ -256,7 +264,7 @@ func TestModel_BadgeClearsOnTabSwitch(t *testing.T) {
 }
 
 func TestModel_Quit(t *testing.T) {
-	m := New(nil, 3)
+	m := New(nil, 3, "")
 	_, cmd := m.Update(tea.KeyPressMsg{Code: 'q'})
 	if cmd == nil {
 		t.Error("q should produce a quit command")
@@ -264,7 +272,7 @@ func TestModel_Quit(t *testing.T) {
 }
 
 func TestModel_WindowResize(t *testing.T) {
-	m := New(nil, 3)
+	m := New(nil, 3, "")
 	updated, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	m = updated.(Model)
 
@@ -274,7 +282,7 @@ func TestModel_WindowResize(t *testing.T) {
 }
 
 func TestModel_ErrorMessage(t *testing.T) {
-	m := New(nil, 3)
+	m := New(nil, 3, "")
 	updated, _ := m.Update(errMsg{err: fmt.Errorf("connection failed")})
 	m = updated.(Model)
 
@@ -288,7 +296,7 @@ func TestModel_ErrorMessage(t *testing.T) {
 }
 
 func TestModel_View_ShowsItems(t *testing.T) {
-	m := New(nil, 3)
+	m := New(nil, 3, "")
 	m.width = 80
 	issues, _ := testItems()
 	m.issues = issues
@@ -302,7 +310,7 @@ func TestModel_View_ShowsItems(t *testing.T) {
 }
 
 func TestModel_SelectedItem(t *testing.T) {
-	m := New(nil, 3)
+	m := New(nil, 3, "")
 	issues, _ := testItems()
 	m.issues = issues
 	m.cursor = 0
@@ -314,7 +322,7 @@ func TestModel_SelectedItem(t *testing.T) {
 }
 
 func TestModel_SelectedItem_Empty(t *testing.T) {
-	m := New(nil, 3)
+	m := New(nil, 3, "")
 	item := m.selectedItem()
 	if item != nil {
 		t.Error("should return nil for empty list")
@@ -322,7 +330,7 @@ func TestModel_SelectedItem_Empty(t *testing.T) {
 }
 
 func TestModel_UpdatedEvent(t *testing.T) {
-	m := New(nil, 3)
+	m := New(nil, 3, "")
 	m.issues = []provider.Item{
 		{ID: "o/r/issues/1", Number: 1, Title: "Old title", UpdatedAt: time.Now()},
 	}
@@ -356,7 +364,7 @@ func manyItems(n int) []provider.Item {
 }
 
 func TestModel_ScrollDown(t *testing.T) {
-	m := New(nil, 100)
+	m := New(nil, 100, "")
 	m.height = 16
 	m.issues = manyItems(30)
 	m.fullLoaded["o/r"] = true
@@ -378,7 +386,7 @@ func TestModel_ScrollDown(t *testing.T) {
 }
 
 func TestModel_ScrollUp(t *testing.T) {
-	m := New(nil, 100)
+	m := New(nil, 100, "")
 	m.height = 16
 	m.issues = manyItems(30)
 	m.fullLoaded["o/r"] = true
@@ -402,7 +410,7 @@ func TestModel_ScrollUp(t *testing.T) {
 }
 
 func TestModel_TabSwitchResetsCursor(t *testing.T) {
-	m := New(nil, 3)
+	m := New(nil, 3, "")
 	m.issues = manyItems(30)
 	m.cursor = 15
 
@@ -415,7 +423,7 @@ func TestModel_TabSwitchResetsCursor(t *testing.T) {
 }
 
 func TestModel_PanelFocusSwitch(t *testing.T) {
-	m := New(nil, 3)
+	m := New(nil, 3, "")
 	if m.focusPanel != panelItems {
 		t.Fatal("should start focused on items panel")
 	}
@@ -446,7 +454,7 @@ func TestModel_PanelFocusSwitch(t *testing.T) {
 }
 
 func TestModel_RepoSelection(t *testing.T) {
-	m := New(nil, 3)
+	m := New(nil, 3, "")
 	m.issues = multiRepoItems(5)
 	m.updateRepoList()
 
@@ -471,7 +479,7 @@ func TestModel_RepoSelection(t *testing.T) {
 }
 
 func TestModel_RepoSelectionAll(t *testing.T) {
-	m := New(nil, 3)
+	m := New(nil, 3, "")
 	m.issues = multiRepoItems(5)
 	m.updateRepoList()
 	m.selectedRepo = m.repos[0]
@@ -492,7 +500,7 @@ func TestModel_RepoSelectionAll(t *testing.T) {
 }
 
 func TestModel_CollapsedGroups(t *testing.T) {
-	m := New(nil, 2)
+	m := New(nil, 2, "")
 	m.issues = multiRepoItems(5)
 	m.updateRepoList()
 	m.fullLoaded["a/alpha"] = true
@@ -520,7 +528,7 @@ func TestModel_CollapsedGroups(t *testing.T) {
 }
 
 func TestModel_ExpandGroup(t *testing.T) {
-	m := New(nil, 2)
+	m := New(nil, 2, "")
 	m.issues = multiRepoItems(5)
 	m.updateRepoList()
 	m.fullLoaded["a/alpha"] = true
@@ -552,7 +560,7 @@ func TestModel_ExpandGroup(t *testing.T) {
 }
 
 func TestModel_RepoListUpdated(t *testing.T) {
-	m := New(nil, 3)
+	m := New(nil, 3, "")
 	issues, prs := testItems()
 
 	updated, _ := m.Update(itemsReceivedMsg{issues: issues, prs: prs})
@@ -567,7 +575,7 @@ func TestModel_RepoListUpdated(t *testing.T) {
 }
 
 func TestModel_RepoPanelNavigation(t *testing.T) {
-	m := New(nil, 3)
+	m := New(nil, 3, "")
 	m.issues = multiRepoItems(3)
 	m.updateRepoList()
 	m.focusPanel = panelRepos
@@ -602,14 +610,14 @@ func TestModel_RepoPanelNavigation(t *testing.T) {
 }
 
 func TestModel_DefaultItemsPerRepo(t *testing.T) {
-	m := New(nil, 0)
+	m := New(nil, 0, "")
 	if m.itemsPerRepo != 3 {
 		t.Errorf("expected default itemsPerRepo 3, got %d", m.itemsPerRepo)
 	}
 }
 
 func TestModel_TabSwitchClearsExpanded(t *testing.T) {
-	m := New(nil, 2)
+	m := New(nil, 2, "")
 	m.issues = multiRepoItems(5)
 	m.updateRepoList()
 	m.expanded["a/alpha"] = true
@@ -623,7 +631,7 @@ func TestModel_TabSwitchClearsExpanded(t *testing.T) {
 }
 
 func TestModel_DetectFullLoaded(t *testing.T) {
-	m := New(nil, 3)
+	m := New(nil, 3, "")
 	m.issues = []provider.Item{
 		{ID: "a/x/issues/1", Number: 1, Repo: provider.RepoRef{Owner: "a", Repo: "x"}},
 		{ID: "a/x/issues/2", Number: 2, Repo: provider.RepoRef{Owner: "a", Repo: "x"}},
@@ -641,7 +649,7 @@ func TestModel_DetectFullLoaded(t *testing.T) {
 }
 
 func TestModel_NotFullLoadedAtLimit(t *testing.T) {
-	m := New(nil, 3)
+	m := New(nil, 3, "")
 	m.issues = multiRepoItems(3)
 
 	updated, _ := m.Update(itemsReceivedMsg{issues: m.issues, prs: nil})
@@ -653,7 +661,7 @@ func TestModel_NotFullLoadedAtLimit(t *testing.T) {
 }
 
 func TestModel_MoreLabelNotFullLoaded(t *testing.T) {
-	m := New(nil, 2)
+	m := New(nil, 2, "")
 	m.issues = multiRepoItems(2)
 	m.updateRepoList()
 	m.rebuildViewport()
@@ -665,7 +673,7 @@ func TestModel_MoreLabelNotFullLoaded(t *testing.T) {
 }
 
 func TestModel_MoreLabelFullLoaded(t *testing.T) {
-	m := New(nil, 2)
+	m := New(nil, 2, "")
 	m.issues = multiRepoItems(5)
 	m.updateRepoList()
 	m.fullLoaded["a/alpha"] = true
@@ -679,7 +687,7 @@ func TestModel_MoreLabelFullLoaded(t *testing.T) {
 }
 
 func TestModel_RepoExpandedMsg(t *testing.T) {
-	m := New(nil, 2)
+	m := New(nil, 2, "")
 	m.issues = multiRepoItems(2)
 	m.updateRepoList()
 
@@ -719,7 +727,7 @@ func TestModel_RepoExpandedMsg(t *testing.T) {
 }
 
 func TestModel_ChunkedExpand_NotFullWhenAtLimit(t *testing.T) {
-	m := New(nil, 2)
+	m := New(nil, 2, "")
 	m.height = 50
 	m.issues = multiRepoItems(2)
 	m.updateRepoList()
@@ -756,7 +764,7 @@ func TestModel_ChunkedExpand_NotFullWhenAtLimit(t *testing.T) {
 }
 
 func TestModel_ChunkedExpand_FullWhenUnderLimit(t *testing.T) {
-	m := New(nil, 2)
+	m := New(nil, 2, "")
 	m.issues = multiRepoItems(2)
 	m.updateRepoList()
 
@@ -784,7 +792,7 @@ func TestModel_ChunkedExpand_FullWhenUnderLimit(t *testing.T) {
 }
 
 func TestModel_ScrollToLastRow_MultiRepo(t *testing.T) {
-	m := New(nil, 3)
+	m := New(nil, 3, "")
 	m.height = 16
 	m.issues = multiRepoItems(3)
 	m.updateRepoList()
@@ -813,7 +821,7 @@ func TestModel_ScrollToLastRow_MultiRepo(t *testing.T) {
 }
 
 func TestModel_ScrollToBottom_CursorVisible(t *testing.T) {
-	m := New(nil, 2)
+	m := New(nil, 2, "")
 	m.height = 12
 	items := multiRepoItems(5)
 	m.issues = items
@@ -862,7 +870,7 @@ func manyRepoItems(numRepos, perRepo int) []provider.Item {
 }
 
 func TestModel_ScrollToBottom_ManyRepos(t *testing.T) {
-	m := New(nil, 3)
+	m := New(nil, 3, "")
 	m.height = 30
 	m.width = 80
 	m.issues = manyRepoItems(11, 3)
@@ -893,6 +901,209 @@ func TestModel_ScrollToBottom_ManyRepos(t *testing.T) {
 
 	if m.cursor != totalRows-1 {
 		t.Errorf("should reach last row %d, got %d", totalRows-1, m.cursor)
+	}
+}
+
+func testSessions() []protocol.SessionPayload {
+	return []protocol.SessionPayload{
+		{ID: "fix-1-abc", Repo: "o/r", Number: 1, ItemType: "issue", Agent: "claude", Status: "running", CreatedAt: time.Now().Add(-2 * time.Minute).Format(time.RFC3339)},
+		{ID: "rev-10-xyz", Repo: "o/r", Number: 10, ItemType: "pr", Agent: "claude", Status: "completed", CreatedAt: time.Now().Add(-5 * time.Minute).Format(time.RFC3339)},
+	}
+}
+
+func TestModel_AttachEnterOnRunningSession(t *testing.T) {
+	m := New(nil, 3, "")
+	m.sessions = testSessions()
+	m.activeTab = tabSessions
+	m.sessionCursor = 0
+
+	updated, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	m = updated.(Model)
+
+	if m.attachedSession == nil {
+		t.Fatal("attachedSession should be set after Enter on running session")
+	}
+	if m.attachedSession.ID != "fix-1-abc" {
+		t.Errorf("expected session fix-1-abc, got %s", m.attachedSession.ID)
+	}
+}
+
+func TestModel_AttachEnterOnCompletedSession(t *testing.T) {
+	m := New(nil, 3, "")
+	m.sessions = testSessions()
+	m.activeTab = tabSessions
+	m.sessionCursor = 1
+
+	updated, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	m = updated.(Model)
+
+	if m.attachedSession != nil {
+		t.Error("should not attach to completed session")
+	}
+}
+
+func TestModel_AttachViewEntersOnMsg(t *testing.T) {
+	m := New(nil, 3, "")
+	m.sessions = testSessions()
+	m.attachedSession = &m.sessions[0]
+
+	updated, _ := m.Update(sessionAttachedMsg{})
+	m = updated.(Model)
+
+	if m.view != viewAttach {
+		t.Error("should be in attach view after sessionAttachedMsg")
+	}
+}
+
+func TestModel_AttachOutputAppends(t *testing.T) {
+	m := New(nil, 3, "")
+	m.view = viewAttach
+	m.attachedSession = &protocol.SessionPayload{ID: "fix-1-abc", Status: "running"}
+	m.width = 80
+	m.height = 40
+
+	updated, _ := m.Update(sessionOutputMsg{sessionID: "fix-1-abc", data: "line 1\nline 2"})
+	m = updated.(Model)
+
+	if len(m.attachOutput) != 1 {
+		t.Fatalf("expected 1 output chunk, got %d", len(m.attachOutput))
+	}
+	if m.attachOutput[0] != "line 1\nline 2" {
+		t.Errorf("unexpected output: %q", m.attachOutput[0])
+	}
+
+	updated, _ = m.Update(sessionOutputMsg{sessionID: "fix-1-abc", data: "line 3"})
+	m = updated.(Model)
+
+	if len(m.attachOutput) != 2 {
+		t.Fatalf("expected 2 output chunks, got %d", len(m.attachOutput))
+	}
+}
+
+func TestModel_AttachViewRender(t *testing.T) {
+	m := New(nil, 3, "")
+	m.view = viewAttach
+	m.width = 80
+	m.height = 30
+	m.attachedSession = &protocol.SessionPayload{
+		ID: "fix-1-abc", Repo: "o/r", Number: 1, Agent: "claude", Status: "running",
+	}
+	m.attachOutput = []string{"hello world"}
+	m.inputBuffer = "test"
+	m.rebuildAttachViewport()
+
+	view := m.View()
+	if !containsString(view.Content, "fix-1-abc") {
+		t.Error("attach view should show session ID")
+	}
+	if !containsString(view.Content, "o/r#1") {
+		t.Error("attach view should show repo and number")
+	}
+	if !containsString(view.Content, "hello world") {
+		t.Error("attach view should show output")
+	}
+	if !containsString(view.Content, "> test") {
+		t.Error("attach view should show input buffer")
+	}
+	if !containsString(view.Content, "esc: detach") {
+		t.Error("attach view should show help text")
+	}
+}
+
+func TestModel_AttachInputBuffer(t *testing.T) {
+	m := New(nil, 3, "")
+	m.view = viewAttach
+	m.attachedSession = &protocol.SessionPayload{ID: "fix-1-abc", Status: "running"}
+
+	updated, _ := m.Update(tea.KeyPressMsg{Code: 'h', Text: "h"})
+	m = updated.(Model)
+	updated, _ = m.Update(tea.KeyPressMsg{Code: 'i', Text: "i"})
+	m = updated.(Model)
+
+	if m.inputBuffer != "hi" {
+		t.Errorf("expected input buffer 'hi', got %q", m.inputBuffer)
+	}
+
+	updated, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyBackspace})
+	m = updated.(Model)
+
+	if m.inputBuffer != "h" {
+		t.Errorf("expected input buffer 'h' after backspace, got %q", m.inputBuffer)
+	}
+}
+
+func TestModel_AttachInputClearsOnEnter(t *testing.T) {
+	m := New(nil, 3, "")
+	m.view = viewAttach
+	m.attachedSession = &protocol.SessionPayload{ID: "fix-1-abc", Status: "running"}
+	m.inputBuffer = "hello"
+
+	updated, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	m = updated.(Model)
+
+	if m.inputBuffer != "" {
+		t.Errorf("input buffer should be cleared after Enter, got %q", m.inputBuffer)
+	}
+}
+
+func TestModel_AttachEscapeDetaches(t *testing.T) {
+	m := New(nil, 3, "")
+	m.view = viewAttach
+	m.attachedSession = &protocol.SessionPayload{ID: "fix-1-abc", Status: "running"}
+	m.attachOutput = []string{"some output"}
+	m.inputBuffer = "partial"
+
+	updated, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+	m = updated.(Model)
+
+	if m.view != viewOverview {
+		t.Error("should return to overview after Escape")
+	}
+	if m.attachedSession != nil {
+		t.Error("attachedSession should be nil after Escape")
+	}
+	if m.attachOutput != nil {
+		t.Error("attachOutput should be nil after Escape")
+	}
+	if m.inputBuffer != "" {
+		t.Error("inputBuffer should be empty after Escape")
+	}
+}
+
+func TestModel_AttachNonOutputIgnored(t *testing.T) {
+	m := New(nil, 3, "")
+	m.view = viewAttach
+	m.attachedSession = &protocol.SessionPayload{ID: "fix-1-abc", Status: "running"}
+
+	updated, _ := m.Update(attachNonOutputMsg{})
+	m = updated.(Model)
+
+	if m.view != viewAttach {
+		t.Error("should stay in attach view after non-output msg")
+	}
+}
+
+func TestModel_AttachOutputIgnoredInOverview(t *testing.T) {
+	m := New(nil, 3, "")
+	m.view = viewOverview
+
+	updated, _ := m.Update(sessionOutputMsg{sessionID: "fix-1-abc", data: "stale output"})
+	m = updated.(Model)
+
+	if len(m.attachOutput) != 0 {
+		t.Error("should not append output when in overview mode")
+	}
+}
+
+func TestModel_AttachQuitDoesNotQuit(t *testing.T) {
+	m := New(nil, 3, "")
+	m.view = viewAttach
+	m.attachedSession = &protocol.SessionPayload{ID: "fix-1-abc", Status: "running"}
+
+	_, cmd := m.Update(tea.KeyPressMsg{Code: 'q', Text: "q"})
+
+	if cmd != nil {
+		t.Error("q should not quit in attach mode, should type 'q' instead")
 	}
 }
 

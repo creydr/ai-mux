@@ -7,13 +7,14 @@ type tab int
 const (
 	tabIssues tab = iota
 	tabPRs
+	tabSessions
 )
 
-var tabNames = []string{"Issues", "Pull Requests"}
+var tabNames = []string{"Issues", "Pull Requests", "Sessions"}
 
-func renderTabs(active tab, issueBadge, prBadge int) string {
+func renderTabs(active tab, issueBadge, prBadge, sessionBadge int) string {
 	var tabs []string
-	badges := []int{issueBadge, prBadge}
+	badges := []int{issueBadge, prBadge, sessionBadge}
 
 	for i, name := range tabNames {
 		label := name

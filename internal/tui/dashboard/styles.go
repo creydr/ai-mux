@@ -45,4 +45,33 @@ var (
 	titleStyle = lipgloss.NewStyle().
 			Bold(true).
 			Foreground(lipgloss.Color("#7D56F4"))
+
+	sessionRunningStyle = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("#50FA7B")).
+				Bold(true)
+
+	sessionWaitingStyle = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("#F1FA8C")).
+				Bold(true)
+
+	sessionDoneStyle = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("#6272A4"))
+
+	sessionFailedStyle = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("#FF5555")).
+				Bold(true)
+
+	sessionStatusStyle = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("#50FA7B")).
+				Bold(true)
+
+	attachHeaderStyle = lipgloss.NewStyle().
+				Bold(true).
+				Foreground(lipgloss.Color("#7D56F4"))
+
+	attachSeparatorStyle = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("#444444"))
+
+	attachInputStyle = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("#FFFFFF"))
 )

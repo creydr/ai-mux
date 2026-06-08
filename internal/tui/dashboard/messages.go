@@ -1,7 +1,10 @@
 package dashboard
 
 import (
+	"time"
+
 	"github.com/creydr/ai-mux/internal/event"
+	"github.com/creydr/ai-mux/internal/protocol"
 	"github.com/creydr/ai-mux/internal/provider"
 )
 
@@ -28,3 +31,37 @@ type repoExpandedMsg struct {
 	itemType       provider.ItemType
 	requestedLimit int
 }
+
+type sessionsReceivedMsg struct {
+	sessions []protocol.SessionPayload
+}
+
+type sessionSpawnedMsg struct {
+	session protocol.SessionPayload
+}
+
+type sessionStoppedMsg struct {
+	sessionID string
+}
+
+type statusMsg struct {
+	text string
+}
+
+type statusClearMsg struct{}
+
+type statusTickMsg struct {
+	id  int
+	due time.Time
+}
+
+type sessionOutputMsg struct {
+	sessionID string
+	data      string
+}
+
+type sessionAttachedMsg struct {
+	session protocol.SessionPayload
+}
+
+type attachNonOutputMsg struct{}

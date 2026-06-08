@@ -28,7 +28,7 @@ func runDashboard(cmd *cobra.Command, args []string) error {
 	}
 	defer conn.Close()
 
-	m := dashboard.New(conn, cfg.Dashboard.ItemsPerRepo)
+	m := dashboard.New(conn, cfg.Dashboard.ItemsPerRepo, cfg.DefaultAgent)
 	p := tea.NewProgram(m)
 	if _, err := p.Run(); err != nil {
 		return fmt.Errorf("running dashboard: %w", err)
