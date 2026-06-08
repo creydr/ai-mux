@@ -61,13 +61,6 @@ type MarkReadPayload struct {
 	ItemID string `json:"item_id"`
 }
 
-type ExecuteActionPayload struct {
-	Action string `json:"action"`
-	Repo   string `json:"repo"`
-	Number int    `json:"number"`
-	Agent  string `json:"agent,omitempty"`
-}
-
 type StatusPayload struct {
 	Running bool     `json:"running"`
 	Repos   []string `json:"repos"`
@@ -115,10 +108,4 @@ type SessionInputPayload struct {
 
 type SessionIDPayload struct {
 	SessionID string `json:"session_id"`
-}
-
-type ActionResultPayload struct {
-	Success bool   `json:"success"`
-	Message string `json:"message"`
-	Action  string `json:"action"`
 }

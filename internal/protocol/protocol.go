@@ -5,13 +5,12 @@ import "encoding/json"
 type MessageType string
 
 const (
-	MsgSubscribe     MessageType = "subscribe"
-	MsgListIssues    MessageType = "list_issues"
-	MsgListPRs       MessageType = "list_prs"
-	MsgGetItem       MessageType = "get_item"
-	MsgMarkRead      MessageType = "mark_read"
-	MsgExecuteAction MessageType = "execute_action"
-	MsgGetStatus     MessageType = "get_status"
+	MsgSubscribe  MessageType = "subscribe"
+	MsgListIssues MessageType = "list_issues"
+	MsgListPRs    MessageType = "list_prs"
+	MsgGetItem    MessageType = "get_item"
+	MsgMarkRead   MessageType = "mark_read"
+	MsgGetStatus  MessageType = "get_status"
 
 	MsgSessionSpawn  MessageType = "session_spawn"
 	MsgSessionList   MessageType = "session_list"
@@ -23,10 +22,7 @@ const (
 	MsgWorktreeExists MessageType = "worktree_exists"
 
 	MsgEvent         MessageType = "event"
-	MsgStateUpdate   MessageType = "state_update"
-	MsgActionResult  MessageType = "action_result"
 	MsgSessionOutput MessageType = "session_output"
-	MsgSessionStatus MessageType = "session_status"
 	MsgResponse      MessageType = "response"
 	MsgError         MessageType = "error"
 )
