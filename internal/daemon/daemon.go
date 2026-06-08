@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"os"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -65,10 +67,14 @@ func New(cfg *config.Config, prov provider.Provider, st store.Store, transport p
 
 	var sessMgr *session.Manager
 	if len(cfg.Agents) > 0 {
+		home, _ := os.UserHomeDir()
+		sessStore := session.NewStore(filepath.Join(home, ".ai-mux"))
 		sessMgr = session.NewManager(session.ManagerConfig{
 			Agents: cfg.Agents,
 			Repos:  cfg.Repos,
+			Store:  sessStore,
 		})
+		sessMgr.Reconcile()
 	}
 
 	return &Daemon{

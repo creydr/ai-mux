@@ -140,7 +140,11 @@ func buildSessionLines(sessions []protocol.SessionPayload, cursor, width int) ([
 			elapsed = time.Since(t).Truncate(time.Second).String()
 		}
 
-		text := fmt.Sprintf("  %-16s %s#%-5d %-10s %s  %s", s.ID, s.Repo, s.Number, s.Agent, badge, elapsed)
+		item := ""
+		if s.Repo != "" && s.Number > 0 {
+			item = fmt.Sprintf("%s#%d", s.Repo, s.Number)
+		}
+		text := fmt.Sprintf("  %-16s  %-30s  %-10s %s  %s", s.ID, item, s.Agent, badge, elapsed)
 		if i == cursor {
 			cursorLine = len(lines)
 			lines = append(lines, selectedItemStyle.Width(width).Render(text))

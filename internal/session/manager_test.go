@@ -259,15 +259,14 @@ func TestManager_Stop(t *testing.T) {
 		t.Fatalf("Stop failed: %v", err)
 	}
 
-	got, err := mgr.Get(sess.ID)
-	if err != nil {
-		t.Fatalf("Get failed: %v", err)
+	_, err = mgr.Get(sess.ID)
+	if err == nil {
+		t.Error("stopped session should be removed from manager")
 	}
-	if got.Status != StatusStopped {
-		t.Errorf("Status = %q, want %q", got.Status, StatusStopped)
-	}
-	if got.CompletedAt == nil {
-		t.Error("CompletedAt should be set")
+
+	sessions := mgr.List()
+	if len(sessions) != 0 {
+		t.Errorf("expected 0 sessions after stop, got %d", len(sessions))
 	}
 
 	mock.mu.Lock()
@@ -488,6 +487,60 @@ func TestSession_IsActive(t *testing.T) {
 				t.Errorf("IsActive() = %v, want %v", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestManager_PersistAndRestore(t *testing.T) {
+	dir := t.TempDir()
+	st := NewStore(dir)
+
+	mock := newMockTmux()
+	mgr := NewManager(ManagerConfig{
+		Agents: []config.AgentConfig{
+			{Name: "claude", Command: "claude", ArgsTemplates: map[string]string{"fix_issue": "fix"}, PostSession: "keep"},
+		},
+		Repos:       []config.RepoConfig{{Name: "owner/repo", Path: "/tmp/test-repo"}},
+		OutputDir:   t.TempDir(),
+		MaxParallel: 5,
+		Store:       st,
+	})
+	mgr.SetTmux(mock)
+	mgr.SetWorktrees(newMockWorktrees())
+	mgr.SetRunner(&mockRunner{})
+
+	sess, err := mgr.Spawn("owner/repo", 42, "issue", "claude", "")
+	if err != nil {
+		t.Fatalf("Spawn failed: %v", err)
+	}
+
+	mgr2 := NewManager(ManagerConfig{
+		Agents: []config.AgentConfig{
+			{Name: "claude", Command: "claude", ArgsTemplates: map[string]string{"fix_issue": "fix"}, PostSession: "keep"},
+		},
+		Repos:       []config.RepoConfig{{Name: "owner/repo", Path: "/tmp/test-repo"}},
+		OutputDir:   t.TempDir(),
+		MaxParallel: 5,
+		Store:       st,
+	})
+	mgr2.SetTmux(mock)
+	mgr2.SetWorktrees(newMockWorktrees())
+	mgr2.SetRunner(&mockRunner{})
+
+	sessions := mgr2.List()
+	if len(sessions) != 1 {
+		t.Fatalf("expected 1 restored session, got %d", len(sessions))
+	}
+	if sessions[0].ID != sess.ID {
+		t.Errorf("restored ID = %q, want %q", sessions[0].ID, sess.ID)
+	}
+	if sessions[0].ItemRepo != "owner/repo" {
+		t.Errorf("restored ItemRepo = %q, want %q", sessions[0].ItemRepo, "owner/repo")
+	}
+	if sessions[0].ItemNumber != 42 {
+		t.Errorf("restored ItemNumber = %d, want 42", sessions[0].ItemNumber)
+	}
+	if sessions[0].Agent != "claude" {
+		t.Errorf("restored Agent = %q, want %q", sessions[0].Agent, "claude")
 	}
 }
 

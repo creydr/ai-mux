@@ -55,6 +55,7 @@ type Manager struct {
 	worktrees   WorktreeCreator
 	postHandler func(repoPath, wtPath, postSession string)
 	repos       map[string]config.RepoConfig
+	store       *Store
 	outputDir   string
 	maxParallel int
 	onStatus    StatusCallback
@@ -69,6 +70,7 @@ type ManagerConfig struct {
 	OutputDir   string
 	MaxParallel int
 	OnStatus    StatusCallback
+	Store       *Store
 }
 
 func NewManager(cfg ManagerConfig) *Manager {
@@ -88,7 +90,7 @@ func NewManager(cfg ManagerConfig) *Manager {
 	wm := worktree.NewManager()
 	runner := agentpkg.NewRunner(cfg.Agents)
 
-	return &Manager{
+	m := &Manager{
 		sessions:  make(map[string]*Session),
 		tmux:      NewTmuxCLI(),
 		runner:    runner,
@@ -98,11 +100,25 @@ func NewManager(cfg ManagerConfig) *Manager {
 			handler.Handle(repoPath, wtPath, "")
 		},
 		repos:       repos,
+		store:       cfg.Store,
 		outputDir:   cfg.OutputDir,
 		maxParallel: cfg.MaxParallel,
 		onStatus:    cfg.OnStatus,
 		outputSubs:  make(map[string][]*OutputSubscription),
 	}
+
+	if m.store != nil {
+		if saved, err := m.store.Load(); err == nil {
+			for id, sess := range saved {
+				if sess.IsActive() {
+					m.sessions[id] = sess
+				}
+			}
+			m.persist()
+		}
+	}
+
+	return m
 }
 
 func (m *Manager) SetTmux(t TmuxExecutor) {
@@ -281,6 +297,7 @@ func (m *Manager) Stop(sessionID string) error {
 	now := time.Now()
 	sess.Status = StatusStopped
 	sess.CompletedAt = &now
+	delete(m.sessions, sessionID)
 	m.mu.Unlock()
 
 	m.notifyStatus(sess)
@@ -377,15 +394,30 @@ func (m *Manager) Reconcile() error {
 		return fmt.Errorf("listing tmux sessions: %w", err)
 	}
 
+	live := make(map[string]bool, len(names))
+	for _, name := range names {
+		live[strings.TrimPrefix(name, tmuxPrefix)] = true
+	}
+
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	for _, name := range names {
-		id := strings.TrimPrefix(name, tmuxPrefix)
-		if _, exists := m.sessions[id]; exists {
+	for id, sess := range m.sessions {
+		if !sess.IsActive() {
 			continue
 		}
+		if live[id] {
+			go m.monitorSession(sess)
+			delete(live, id)
+		} else {
+			now := time.Now()
+			sess.Status = StatusCompleted
+			sess.CompletedAt = &now
+		}
+	}
 
+	for id := range live {
+		name := tmuxPrefix + id
 		sess := &Session{
 			ID:          id,
 			TmuxSession: name,
@@ -396,6 +428,7 @@ func (m *Manager) Reconcile() error {
 		go m.monitorSession(sess)
 	}
 
+	m.persist()
 	return nil
 }
 
@@ -444,6 +477,7 @@ func (m *Manager) monitorSession(sess *Session) {
 			} else {
 				sess.Status = StatusCompleted
 			}
+			delete(m.sessions, sess.ID)
 			m.mu.Unlock()
 			m.handlePostSession(sess)
 			m.notifyStatus(sess)
@@ -502,10 +536,18 @@ func (m *Manager) handlePostSession(sess *Session) {
 }
 
 func (m *Manager) notifyStatus(sess *Session) {
+	m.persist()
 	if m.onStatus != nil {
 		cp := *sess
 		m.onStatus(&cp)
 	}
+}
+
+func (m *Manager) persist() {
+	if m.store == nil {
+		return
+	}
+	m.store.Save(m.sessions)
 }
 
 func (m *Manager) saveFinalScreen(sess *Session) {
