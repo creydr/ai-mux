@@ -68,7 +68,10 @@ func New(cfg *config.Config, prov provider.Provider, st store.Store, transport p
 
 	var sessMgr *session.Manager
 	if len(cfg.Agents) > 0 {
-		home, _ := os.UserHomeDir()
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return nil, fmt.Errorf("getting home directory: %w", err)
+		}
 		sessStore := session.NewStore(filepath.Join(home, ".ai-mux"))
 		sessMgr = session.NewManager(session.ManagerConfig{
 			Agents: cfg.Agents,

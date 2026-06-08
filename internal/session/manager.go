@@ -75,7 +75,10 @@ type ManagerConfig struct {
 
 func NewManager(cfg ManagerConfig) *Manager {
 	if cfg.OutputDir == "" {
-		home, _ := os.UserHomeDir()
+		home, err := os.UserHomeDir()
+		if err != nil {
+			home = os.TempDir()
+		}
 		cfg.OutputDir = filepath.Join(home, ".ai-mux", "sessions")
 	}
 	if cfg.MaxParallel <= 0 {
