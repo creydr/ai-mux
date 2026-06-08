@@ -25,7 +25,11 @@ func (s *Store) Save(sessions map[string]*Session) error {
 		return fmt.Errorf("marshaling sessions: %w", err)
 	}
 
-	return os.WriteFile(s.path, data, 0644)
+	tmp := s.path + ".tmp"
+	if err := os.WriteFile(tmp, data, 0644); err != nil {
+		return fmt.Errorf("writing temp file: %w", err)
+	}
+	return os.Rename(tmp, s.path)
 }
 
 func (s *Store) Load() (map[string]*Session, error) {
