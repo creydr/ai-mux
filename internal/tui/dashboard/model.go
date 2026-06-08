@@ -722,7 +722,7 @@ func (m Model) statusBarText() string {
 	case tabSessions:
 		return "enter: attach (ctrl-b d: detach) | s: stop | tab: switch | ctrl-c: quit"
 	default:
-		return "c: agent | b: browser | s: stop | tab: switch | r: refresh | ctrl-c: quit"
+		return "c: agent | b: browser | tab: switch | r: refresh | ctrl-c: quit"
 	}
 }
 
