@@ -8,7 +8,7 @@ var (
 	activeTabStyle = lipgloss.NewStyle().
 			Bold(true).
 			Foreground(lipgloss.Color("#FFFFFF")).
-			Background(lipgloss.Color("#7D56F4")).
+			Background(lipgloss.Color("#61AFEF")).
 			Padding(0, 2)
 
 	inactiveTabStyle = lipgloss.NewStyle().
@@ -28,12 +28,12 @@ var (
 
 	repoHeaderStyle = lipgloss.NewStyle().
 			Bold(true).
-			Foreground(lipgloss.Color("#7D56F4")).
+			Foreground(lipgloss.Color("#61AFEF")).
 			PaddingTop(1)
 
 	repoHeaderInlineStyle = lipgloss.NewStyle().
 				Bold(true).
-				Foreground(lipgloss.Color("#7D56F4"))
+				Foreground(lipgloss.Color("#61AFEF"))
 
 	badgeStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#FF5555")).
@@ -44,7 +44,7 @@ var (
 
 	titleStyle = lipgloss.NewStyle().
 			Bold(true).
-			Foreground(lipgloss.Color("#7D56F4"))
+			Foreground(lipgloss.Color("#61AFEF"))
 
 	sessionRunningStyle = lipgloss.NewStyle().
 				Foreground(lipgloss.Color("#50FA7B")).
@@ -67,7 +67,7 @@ var (
 
 	attachHeaderStyle = lipgloss.NewStyle().
 				Bold(true).
-				Foreground(lipgloss.Color("#7D56F4"))
+				Foreground(lipgloss.Color("#61AFEF"))
 
 	attachSeparatorStyle = lipgloss.NewStyle().
 				Foreground(lipgloss.Color("#444444"))

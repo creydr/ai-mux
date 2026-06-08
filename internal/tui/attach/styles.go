@@ -7,7 +7,7 @@ import (
 var (
 	headerStyle = lipgloss.NewStyle().
 			Bold(true).
-			Foreground(lipgloss.Color("#7D56F4")).
+			Foreground(lipgloss.Color("#61AFEF")).
 			PaddingBottom(1)
 
 	labelStyle = lipgloss.NewStyle().

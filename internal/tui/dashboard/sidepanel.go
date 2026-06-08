@@ -11,7 +11,7 @@ const panelWidth = 22
 func renderSidePanel(repos []string, repoCursor int, selectedRepo string, focused bool, height int) string {
 	borderColor := lipgloss.Color("#555555")
 	if focused {
-		borderColor = lipgloss.Color("#7D56F4")
+		borderColor = lipgloss.Color("#61AFEF")
 	}
 
 	style := lipgloss.NewStyle().
