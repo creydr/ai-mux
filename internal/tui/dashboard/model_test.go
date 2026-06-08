@@ -266,9 +266,9 @@ func TestModel_BadgeClearsOnTabSwitch(t *testing.T) {
 
 func TestModel_Quit(t *testing.T) {
 	m := New(nil, 3, nil, "")
-	_, cmd := m.Update(tea.KeyPressMsg{Code: 'q'})
+	_, cmd := m.Update(tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl})
 	if cmd == nil {
-		t.Error("q should produce a quit command")
+		t.Error("ctrl-c should produce a quit command")
 	}
 }
 

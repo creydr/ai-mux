@@ -375,6 +375,9 @@ func (m *Model) rebuildViewport() {
 }
 
 func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	if msg.Code == 'c' && msg.Mod.Contains(tea.ModCtrl) {
+		return m, tea.Quit
+	}
 	if m.view == viewAttach {
 		return m.handleAttachKey(msg)
 	}
@@ -566,8 +569,6 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return m, fetchItemsCmd(m.conn, m.itemsPerRepo)
 		}
 		return m, nil
-	case msg.Code == 'q' || msg.Code == tea.KeyEscape:
-		return m, tea.Quit
 	}
 	return m, nil
 }
@@ -719,9 +720,9 @@ func (m *Model) scheduleStatusClear() tea.Cmd {
 func (m Model) statusBarText() string {
 	switch m.activeTab {
 	case tabSessions:
-		return "enter: attach (ctrl-b d: detach) | s: stop | tab: switch | q: quit"
+		return "enter: attach (ctrl-b d: detach) | s: stop | tab: switch | ctrl-c: quit"
 	default:
-		return "c: agent | b: browser | s: stop | tab: switch | r: refresh | q: quit"
+		return "c: agent | b: browser | s: stop | tab: switch | r: refresh | ctrl-c: quit"
 	}
 }
 
