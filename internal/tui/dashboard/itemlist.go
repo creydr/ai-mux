@@ -108,11 +108,11 @@ func buildContentLines(items []provider.Item, cursor, width, itemsPerRepo int, e
 }
 
 func sessionBadge(status string, waitingInput bool) string {
-	if waitingInput {
-		return sessionWaitingStyle.Render("[waiting]")
-	}
 	switch status {
 	case "running", "pending":
+		if waitingInput {
+			return sessionWaitingStyle.Render("[waiting]")
+		}
 		return sessionRunningStyle.Render("[running]")
 	case "completed":
 		return sessionDoneStyle.Render("[done]")

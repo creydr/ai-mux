@@ -979,7 +979,7 @@ func TestModel_AttachEnterOnCompletedSession(t *testing.T) {
 	m = updated.(Model)
 
 	if m.attachedSession == nil {
-		t.Error("should attach to completed session for viewing output")
+		t.Error("should attach to completed session for read-only viewing")
 	}
 }
 

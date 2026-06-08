@@ -358,7 +358,10 @@ func (m *Manager) monitorSession(sess *Session) {
 		}
 		m.mu.RUnlock()
 
-		if !m.tmux.HasSession(sess.TmuxSession) {
+		if m.tmux.IsPaneDead(sess.TmuxSession) || !m.tmux.HasSession(sess.TmuxSession) {
+			m.saveFinalScreen(sess)
+			m.tmux.KillSession(sess.TmuxSession)
+
 			m.mu.Lock()
 			now := time.Now()
 			sess.CompletedAt = &now
@@ -439,6 +442,15 @@ func (m *Manager) notifyStatus(sess *Session) {
 	}
 }
 
+func (m *Manager) saveFinalScreen(sess *Session) {
+	output, err := m.tmux.CapturePane(sess.TmuxSession)
+	if err != nil {
+		return
+	}
+	screenFile := filepath.Join(m.outputDir, sess.ID, "screen.txt")
+	os.WriteFile(screenFile, []byte(output), 0644)
+}
+
 func (m *Manager) pollCapturePane(ctx context.Context, tmuxName string, ch chan<- []byte) {
 	ticker := time.NewTicker(200 * time.Millisecond)
 	defer ticker.Stop()
@@ -462,13 +474,17 @@ func (m *Manager) pollCapturePane(ctx context.Context, tmuxName string, ch chan<
 }
 
 func (m *Manager) sendFileOnce(ctx context.Context, path string, ch chan<- []byte) {
-	data, err := os.ReadFile(path)
+	screenPath := filepath.Join(filepath.Dir(path), "screen.txt")
+	data, err := os.ReadFile(screenPath)
 	if err != nil {
-		return
+		data, err = os.ReadFile(path)
+		if err != nil {
+			return
+		}
+		data = stripANSI(data)
 	}
-	stripped := stripANSI(data)
 	select {
-	case ch <- stripped:
+	case ch <- data:
 	case <-ctx.Done():
 	}
 }

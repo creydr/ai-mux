@@ -66,6 +66,10 @@ func (m *mockTmux) HasSession(name string) bool {
 	return m.sessions[name]
 }
 
+func (m *mockTmux) IsPaneDead(name string) bool {
+	return false
+}
+
 func (m *mockTmux) PanePID(name string) (int, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()

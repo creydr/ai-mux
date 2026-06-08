@@ -13,6 +13,7 @@ type TmuxExecutor interface {
 	SendKeys(name, keys string) error
 	ListSessions(prefix string) ([]string, error)
 	HasSession(name string) bool
+	IsPaneDead(name string) bool
 	PanePID(name string) (int, error)
 	PipePaneToFile(name, path string) error
 	CapturePane(name string) (string, error)
@@ -29,7 +30,7 @@ func (t *tmuxCLI) NewSession(name, workdir, command string) error {
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("tmux new-session: %s: %w", strings.TrimSpace(string(out)), err)
 	}
-	exec.Command("tmux", "set-option", "-t", name, "remain-on-exit", "off").Run()
+	exec.Command("tmux", "set-option", "-t", name, "remain-on-exit", "on").Run()
 	return nil
 }
 
@@ -74,6 +75,15 @@ func (t *tmuxCLI) ListSessions(prefix string) ([]string, error) {
 func (t *tmuxCLI) HasSession(name string) bool {
 	cmd := exec.Command("tmux", "has-session", "-t", name)
 	return cmd.Run() == nil
+}
+
+func (t *tmuxCLI) IsPaneDead(name string) bool {
+	cmd := exec.Command("tmux", "display-message", "-t", name, "-p", "#{pane_dead}")
+	out, err := cmd.Output()
+	if err != nil {
+		return false
+	}
+	return strings.TrimSpace(string(out)) == "1"
 }
 
 func (t *tmuxCLI) PanePID(name string) (int, error) {
