@@ -705,9 +705,9 @@ func (m *Model) scheduleStatusClear() tea.Cmd {
 func (m Model) statusBarText() string {
 	switch m.activeTab {
 	case tabSessions:
-		return "enter: attach (ctrl-b d: detach) | s: stop | j/k: nav | tab: switch | q: quit"
+		return "enter: attach (ctrl-b d: detach) | s: stop | tab: switch | q: quit"
 	default:
-		return "c: agent | b: browser | s: stop | j/k: nav | tab: switch | r: refresh | q: quit"
+		return "c: agent | b: browser | s: stop | tab: switch | r: refresh | q: quit"
 	}
 }
 
