@@ -101,6 +101,19 @@ func receiveWithTimeout(t *testing.T, conn protocol.Conn, timeout time.Duration)
 	}
 }
 
+func parseItems(t *testing.T, resp protocol.Message) []provider.Item {
+	t.Helper()
+	var payload protocol.ItemsPayload
+	if err := json.Unmarshal(resp.Payload, &payload); err != nil {
+		t.Fatalf("parsing items payload: %v", err)
+	}
+	var items []provider.Item
+	if err := json.Unmarshal(payload.Items, &items); err != nil {
+		t.Fatalf("parsing items: %v", err)
+	}
+	return items
+}
+
 func TestDaemon_StartAndStop(t *testing.T) {
 	cfg := testConfig(t)
 	prov := mock.New()
@@ -140,14 +153,13 @@ func TestDaemon_ListIssues(t *testing.T) {
 	sendRequest(t, conn, protocol.MsgListIssues, "1", protocol.ListPayload{})
 	resp := receiveWithTimeout(t, conn, 2*time.Second)
 
-	var items protocol.ItemsPayload
-	json.Unmarshal(resp.Payload, &items)
+	items := parseItems(t, resp)
 
-	if len(items.Items) != 1 {
-		t.Fatalf("expected 1 issue, got %d", len(items.Items))
+	if len(items) != 1 {
+		t.Fatalf("expected 1 issue, got %d", len(items))
 	}
-	if items.Items[0].Title != "Bug" {
-		t.Errorf("expected title 'Bug', got %q", items.Items[0].Title)
+	if items[0].Title != "Bug" {
+		t.Errorf("expected title 'Bug', got %q", items[0].Title)
 	}
 }
 
@@ -164,14 +176,13 @@ func TestDaemon_ListPRs(t *testing.T) {
 	sendRequest(t, conn, protocol.MsgListPRs, "1", protocol.ListPayload{})
 	resp := receiveWithTimeout(t, conn, 2*time.Second)
 
-	var items protocol.ItemsPayload
-	json.Unmarshal(resp.Payload, &items)
+	items := parseItems(t, resp)
 
-	if len(items.Items) != 1 {
-		t.Fatalf("expected 1 PR, got %d", len(items.Items))
+	if len(items) != 1 {
+		t.Fatalf("expected 1 PR, got %d", len(items))
 	}
-	if items.Items[0].Title != "Feature" {
-		t.Errorf("expected title 'Feature', got %q", items.Items[0].Title)
+	if items[0].Title != "Feature" {
+		t.Errorf("expected title 'Feature', got %q", items[0].Title)
 	}
 }
 
@@ -198,14 +209,13 @@ func TestDaemon_ListIssues_FilteredByRepo(t *testing.T) {
 	sendRequest(t, conn, protocol.MsgListIssues, "1", protocol.ListPayload{Repo: "owner/repo1"})
 	resp := receiveWithTimeout(t, conn, 2*time.Second)
 
-	var items protocol.ItemsPayload
-	json.Unmarshal(resp.Payload, &items)
+	items := parseItems(t, resp)
 
-	if len(items.Items) != 1 {
-		t.Fatalf("expected 1 issue from repo1, got %d", len(items.Items))
+	if len(items) != 1 {
+		t.Fatalf("expected 1 issue from repo1, got %d", len(items))
 	}
-	if items.Items[0].Title != "R1" {
-		t.Errorf("expected title 'R1', got %q", items.Items[0].Title)
+	if items[0].Title != "R1" {
+		t.Errorf("expected title 'R1', got %q", items[0].Title)
 	}
 }
 
@@ -296,12 +306,11 @@ func TestDaemon_MultipleClients(t *testing.T) {
 	resp1 := receiveWithTimeout(t, conn1, 2*time.Second)
 	resp2 := receiveWithTimeout(t, conn2, 2*time.Second)
 
-	var items1, items2 protocol.ItemsPayload
-	json.Unmarshal(resp1.Payload, &items1)
-	json.Unmarshal(resp2.Payload, &items2)
+	parsed1 := parseItems(t, resp1)
+	parsed2 := parseItems(t, resp2)
 
-	if len(items1.Items) != 1 || len(items2.Items) != 1 {
-		t.Errorf("both clients should get 1 item, got %d and %d", len(items1.Items), len(items2.Items))
+	if len(parsed1) != 1 || len(parsed2) != 1 {
+		t.Errorf("both clients should get 1 item, got %d and %d", len(parsed1), len(parsed2))
 	}
 }
 

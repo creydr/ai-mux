@@ -289,7 +289,8 @@ func (d *Daemon) handleListItems(cc *clientConn, msg protocol.Message, itemType 
 		allItems = append(allItems, r.items...)
 	}
 
-	resp, _ := protocol.NewResponse(msg.ID, protocol.ItemsPayload{Items: allItems})
+	itemsJSON, _ := json.Marshal(allItems)
+	resp, _ := protocol.NewResponse(msg.ID, protocol.ItemsPayload{Items: itemsJSON})
 	cc.conn.Send(resp)
 }
 

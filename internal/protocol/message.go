@@ -3,8 +3,6 @@ package protocol
 import (
 	"encoding/json"
 	"fmt"
-
-	"github.com/creydr/ai-mux/internal/provider"
 )
 
 func NewRequest(msgType MessageType, id string, payload any) (Message, error) {
@@ -78,7 +76,7 @@ type StatusPayload struct {
 }
 
 type ItemsPayload struct {
-	Items []provider.Item `json:"items"`
+	Items json.RawMessage `json:"items"`
 }
 
 type SessionSpawnPayload struct {

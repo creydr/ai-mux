@@ -26,6 +26,10 @@ func fetchItemsCmd(conn protocol.Conn, limit int) tea.Cmd {
 		if err := json.Unmarshal(issueResp.Payload, &issues); err != nil {
 			return errMsg{err: fmt.Errorf("parsing issues: %w", err)}
 		}
+		var issueItems []provider.Item
+		if err := json.Unmarshal(issues.Items, &issueItems); err != nil {
+			return errMsg{err: fmt.Errorf("parsing issue items: %w", err)}
+		}
 
 		prMsg, _ := protocol.NewRequest(protocol.MsgListPRs, "dash-prs", protocol.ListPayload{Limit: limit})
 		if err := conn.Send(prMsg); err != nil {
@@ -39,10 +43,14 @@ func fetchItemsCmd(conn protocol.Conn, limit int) tea.Cmd {
 		if err := json.Unmarshal(prResp.Payload, &prs); err != nil {
 			return errMsg{err: fmt.Errorf("parsing PRs: %w", err)}
 		}
+		var prItems []provider.Item
+		if err := json.Unmarshal(prs.Items, &prItems); err != nil {
+			return errMsg{err: fmt.Errorf("parsing PR items: %w", err)}
+		}
 
 		return itemsReceivedMsg{
-			issues: issues.Items,
-			prs:    prs.Items,
+			issues: issueItems,
+			prs:    prItems,
 		}
 	}
 }
@@ -68,10 +76,14 @@ func expandRepoCmd(conn protocol.Conn, repo string, itemType provider.ItemType, 
 		if err := json.Unmarshal(resp.Payload, &payload); err != nil {
 			return errMsg{err: fmt.Errorf("parsing items: %w", err)}
 		}
+		var items []provider.Item
+		if err := json.Unmarshal(payload.Items, &items); err != nil {
+			return errMsg{err: fmt.Errorf("parsing items: %w", err)}
+		}
 
 		return repoExpandedMsg{
 			repo:           repo,
-			items:          payload.Items,
+			items:          items,
 			itemType:       itemType,
 			requestedLimit: limit,
 		}
