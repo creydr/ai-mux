@@ -20,6 +20,10 @@ type errMsg struct {
 	err error
 }
 
+type contentRenderedMsg struct {
+	lines []string
+}
+
 type CloseMsg struct{}
 
 type SpawnSessionMsg struct {

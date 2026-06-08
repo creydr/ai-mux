@@ -81,7 +81,7 @@ func TestModel_ScrollDown(t *testing.T) {
 	m := New(nil, ref)
 	m.item = testItem()
 
-	updated, _ := m.Update(tea.KeyPressMsg{Code: 'j'})
+	updated, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyDown})
 	m = updated.(Model)
 
 	if m.scroll != 1 {
@@ -94,7 +94,7 @@ func TestModel_ScrollUp(t *testing.T) {
 	m := New(nil, ref)
 	m.scroll = 3
 
-	updated, _ := m.Update(tea.KeyPressMsg{Code: 'k'})
+	updated, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyUp})
 	m = updated.(Model)
 
 	if m.scroll != 2 {
@@ -107,7 +107,7 @@ func TestModel_ScrollUp_Floor(t *testing.T) {
 	m := New(nil, ref)
 	m.scroll = 0
 
-	updated, _ := m.Update(tea.KeyPressMsg{Code: 'k'})
+	updated, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyUp})
 	m = updated.(Model)
 
 	if m.scroll != 0 {
@@ -137,10 +137,18 @@ func TestModel_WindowResize(t *testing.T) {
 	}
 }
 
+func triggerRender(m Model) Model {
+	cmd := renderContentCmd(m.item, m.reviews, m.comments, m.width, m.err)
+	msg := cmd()
+	updated, _ := m.Update(msg)
+	return updated.(Model)
+}
+
 func TestModel_View_ShowsItem(t *testing.T) {
 	ref := Ref{Type: provider.ItemTypeIssue, Owner: "o", Repo: "r", Number: 1}
 	m := New(nil, ref)
 	m.item = testItem()
+	m = triggerRender(m)
 
 	view := m.View()
 	if !contains(view.Content, "Test issue") {
@@ -158,6 +166,7 @@ func TestModel_View_ShowsReviews(t *testing.T) {
 	m.reviews = []provider.Review{
 		{Author: "reviewer", State: "APPROVED", Body: "looks good"},
 	}
+	m = triggerRender(m)
 
 	view := m.View()
 	if !contains(view.Content, "Reviews") {
@@ -172,6 +181,7 @@ func TestModel_View_ShowsComments(t *testing.T) {
 	m.comments = []provider.Comment{
 		{Author: "commenter", Body: "interesting"},
 	}
+	m = triggerRender(m)
 
 	view := m.View()
 	if !contains(view.Content, "Comments") {
@@ -183,8 +193,12 @@ func TestModel_Error(t *testing.T) {
 	ref := Ref{Type: provider.ItemTypeIssue, Owner: "o", Repo: "r", Number: 1}
 	m := New(nil, ref)
 
-	updated, _ := m.Update(errMsg{err: fmt.Errorf("oops")})
+	updated, cmd := m.Update(errMsg{err: fmt.Errorf("oops")})
 	m = updated.(Model)
+	if cmd != nil {
+		rendered, _ := m.Update(cmd())
+		m = rendered.(Model)
+	}
 
 	view := m.View()
 	if !contains(view.Content, "oops") {

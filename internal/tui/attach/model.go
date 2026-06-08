@@ -22,6 +22,8 @@ type Model struct {
 	comments []provider.Comment
 	scroll   int
 	err      error
+
+	renderedLines []string
 }
 
 func New(conn protocol.Conn, ref Ref) Model {
@@ -31,19 +33,23 @@ func New(conn protocol.Conn, ref Ref) Model {
 	}
 }
 
-func NewEmbedded(conn protocol.Conn, ref Ref, width, height int) Model {
+func NewEmbedded(conn protocol.Conn, ref Ref, width, height int, item *provider.Item) Model {
 	return Model{
 		conn:     conn,
 		ref:      ref,
 		embedded: true,
 		width:    width,
 		height:   height,
+		item:     item,
 	}
 }
 
 func (m Model) Init() tea.Cmd {
-	if m.conn == nil {
+	if m.conn == nil && m.item == nil {
 		return nil
+	}
+	if m.item != nil {
+		return renderContentCmd(m.item, m.reviews, m.comments, m.width, m.err)
 	}
 	return fetchItemCmd(m.conn, m.ref)
 }
@@ -55,65 +61,91 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
+		return m, renderContentCmd(m.item, m.reviews, m.comments, m.width, m.err)
+	case contentRenderedMsg:
+		m.renderedLines = msg.lines
 		return m, nil
 	case itemLoadedMsg:
 		m.item = msg.item
-		return m, nil
+		return m, renderContentCmd(m.item, m.reviews, m.comments, m.width, m.err)
 	case reviewsLoadedMsg:
 		m.reviews = msg.reviews
-		return m, nil
+		return m, renderContentCmd(m.item, m.reviews, m.comments, m.width, m.err)
 	case commentsLoadedMsg:
 		m.comments = msg.comments
-		return m, nil
+		return m, renderContentCmd(m.item, m.reviews, m.comments, m.width, m.err)
 	case errMsg:
 		m.err = msg.err
-		return m, nil
+		return m, renderContentCmd(m.item, m.reviews, m.comments, m.width, m.err)
 	}
 	return m, nil
 }
 
+func renderContentCmd(item *provider.Item, reviews []provider.Review, comments []provider.Comment, width int, err error) tea.Cmd {
+	return func() tea.Msg {
+		var b strings.Builder
+		b.WriteString(renderHeader(item))
+		b.WriteString("\n\n")
+		b.WriteString(renderBody(item, width))
+		if len(reviews) > 0 {
+			b.WriteString(renderReviews(reviews))
+		}
+		if len(comments) > 0 {
+			b.WriteString(renderComments(comments))
+		}
+		if err != nil {
+			b.WriteString(fmt.Sprintf("\n  Error: %v\n", err))
+		}
+		return contentRenderedMsg{lines: strings.Split(b.String(), "\n")}
+	}
+}
+
 func (m Model) View() tea.View {
-	var b strings.Builder
-
-	b.WriteString(renderHeader(m.item))
-	b.WriteString("\n\n")
-	b.WriteString(renderBody(m.item, m.width))
-
-	if len(m.reviews) > 0 {
-		b.WriteString(renderReviews(m.reviews))
-	}
-	if len(m.comments) > 0 {
-		b.WriteString(renderComments(m.comments))
-	}
-
-	if m.err != nil {
-		b.WriteString(fmt.Sprintf("\n  Error: %v\n", m.err))
-	}
-
-	b.WriteString("\n")
+	statusBar := "\n"
 	if m.embedded {
-		b.WriteString(statusStyle.Render("  c: agent | j/k: scroll | r: refresh | o: browser | esc: back"))
+		statusBar += statusStyle.Render("  c: agent | r: refresh | o: browser | esc: back")
 	} else {
-		b.WriteString(statusStyle.Render("  j/k: scroll | r: refresh | o: open in browser | q: quit"))
+		statusBar += statusStyle.Render("  r: refresh | o: open in browser | q: quit")
 	}
 
-	content := b.String()
-	lines := strings.Split(content, "\n")
+	if len(m.renderedLines) == 0 {
+		content := renderHeader(m.item) + "\n\n  Loading..."
+		v := tea.NewView(content + statusBar)
+		v.AltScreen = true
+		return v
+	}
+
+	lines := m.renderedLines
 	if m.scroll > 0 && m.scroll < len(lines) {
 		lines = lines[m.scroll:]
 	}
 
-	v := tea.NewView(strings.Join(lines, "\n"))
+	viewHeight := m.height - 2
+	if viewHeight > 0 && len(lines) > viewHeight {
+		lines = lines[:viewHeight]
+	}
+
+	v := tea.NewView(strings.Join(lines, "\n") + statusBar)
 	v.AltScreen = true
 	return v
 }
 
+func (m Model) maxScroll() int {
+	max := len(m.renderedLines) - m.height + 2
+	if max < 0 {
+		return 0
+	}
+	return max
+}
+
 func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch {
-	case msg.Code == 'j' || msg.Code == tea.KeyDown:
-		m.scroll++
+	case msg.Code == tea.KeyDown:
+		if m.scroll < m.maxScroll() {
+			m.scroll++
+		}
 		return m, nil
-	case msg.Code == 'k' || msg.Code == tea.KeyUp:
+	case msg.Code == tea.KeyUp:
 		if m.scroll > 0 {
 			m.scroll--
 		}

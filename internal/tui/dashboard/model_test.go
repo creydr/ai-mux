@@ -1107,6 +1107,75 @@ func TestModel_AttachQuitDoesNotQuit(t *testing.T) {
 	}
 }
 
+func TestModel_ItemDetailScrollDoesNotOpenAgentPicker(t *testing.T) {
+	m := New(nil, 3, []string{"claude", "gpt"}, "")
+	issues, _ := testItems()
+	m.issues = issues
+	m.width = 80
+	m.height = 40
+	m.cursor = 0
+
+	updated, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	m = updated.(Model)
+
+	if m.view != viewItemDetail {
+		t.Fatalf("expected viewItemDetail after Enter, got %d", m.view)
+	}
+	if m.itemDetail == nil {
+		t.Fatal("itemDetail should be set")
+	}
+
+	updated, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyDown})
+	m = updated.(Model)
+
+	if m.view != viewItemDetail {
+		t.Errorf("expected viewItemDetail after arrow down, got %d (viewAgentPicker=%d)", m.view, viewAgentPicker)
+	}
+	if m.itemDetail == nil {
+		t.Error("itemDetail should still be set after arrow down")
+	}
+
+	updated, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyDown})
+	m = updated.(Model)
+	if m.view != viewItemDetail {
+		t.Errorf("expected viewItemDetail after second arrow down, got %d", m.view)
+	}
+
+	updated, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyUp})
+	m = updated.(Model)
+	if m.view != viewItemDetail {
+		t.Errorf("expected viewItemDetail after arrow up, got %d", m.view)
+	}
+}
+
+func TestModel_ItemDetailCKeySpawnsAgent(t *testing.T) {
+	m := New(nil, 3, []string{"claude"}, "")
+	issues, _ := testItems()
+	m.issues = issues
+	m.width = 80
+	m.height = 40
+	m.cursor = 0
+
+	updated, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	m = updated.(Model)
+
+	if m.view != viewItemDetail {
+		t.Fatal("should be in item detail view")
+	}
+
+	updated, cmd := m.Update(tea.KeyPressMsg{Code: 'c'})
+	m = updated.(Model)
+
+	if cmd == nil {
+		t.Fatal("pressing 'c' in detail view should return a cmd producing SpawnSessionMsg")
+	}
+
+	msg := cmd()
+	if _, ok := msg.(attach.SpawnSessionMsg); !ok {
+		t.Errorf("expected SpawnSessionMsg, got %T", msg)
+	}
+}
+
 func TestModel_TmuxDetachedReturnsToOverview(t *testing.T) {
 	m := New(nil, 3, nil, "")
 	m.view = viewOverview

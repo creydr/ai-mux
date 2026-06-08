@@ -508,7 +508,7 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 				Repo:   item.Repo.Repo,
 				Number: item.Number,
 			}
-			detail := attach.NewEmbedded(m.conn, ref, m.width, m.height)
+			detail := attach.NewEmbedded(m.conn, ref, m.width, m.height, item)
 			m.itemDetail = &detail
 			m.view = viewItemDetail
 			return m, m.itemDetail.Init()
