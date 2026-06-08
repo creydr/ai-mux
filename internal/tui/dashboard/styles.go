@@ -71,7 +71,4 @@ var (
 
 	attachSeparatorStyle = lipgloss.NewStyle().
 				Foreground(lipgloss.Color("#444444"))
-
-	attachInputStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("#FFFFFF"))
 )

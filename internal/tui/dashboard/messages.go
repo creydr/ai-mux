@@ -65,3 +65,7 @@ type sessionAttachedMsg struct {
 }
 
 type attachNonOutputMsg struct{}
+
+type tmuxDetachedMsg struct {
+	err error
+}

@@ -81,7 +81,6 @@ type Model struct {
 	attachedSession *protocol.SessionPayload
 	attachOutput    []string
 	attachViewport  viewport.Model
-	inputBuffer     string
 
 	itemDetail *attach.Model
 }
@@ -180,10 +179,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case sessionSpawnedMsg:
 		m.sessions = append(m.sessions, msg.session)
-		sess := msg.session
-		m.attachedSession = &sess
+		return m, tmuxAttachCmd(msg.session.ID)
+	case tmuxDetachedMsg:
+		m.view = viewOverview
+		m.rebuildViewport()
 		if m.conn != nil {
-			return m, attachSessionCmd(m.conn, sess.ID)
+			return m, fetchSessionsCmd(m.conn)
 		}
 		return m, nil
 	case sessionStoppedMsg:
@@ -236,7 +237,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case sessionAttachedMsg:
 		m.view = viewAttach
 		m.attachOutput = nil
-		m.inputBuffer = ""
 		m.rebuildAttachViewport()
 		return m, listenAttachOutputCmd(m.conn)
 	case sessionOutputMsg:
@@ -443,6 +443,9 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if m.activeTab == tabSessions {
 			if m.sessionCursor >= 0 && m.sessionCursor < len(m.sessions) {
 				sess := m.sessions[m.sessionCursor]
+				if sess.Status == "running" || sess.Status == "pending" {
+					return m, tmuxAttachCmd(sess.ID)
+				}
 				m.attachedSession = &sess
 				if m.conn != nil {
 					return m, attachSessionCmd(m.conn, sess.ID)
@@ -702,7 +705,7 @@ func (m *Model) scheduleStatusClear() tea.Cmd {
 func (m Model) statusBarText() string {
 	switch m.activeTab {
 	case tabSessions:
-		return "enter: attach | s: stop | j/k: nav | tab: switch | q: quit"
+		return "enter: attach (ctrl-b d: detach) | s: stop | j/k: nav | tab: switch | q: quit"
 	default:
 		return "c: agent | b: browser | s: stop | j/k: nav | tab: switch | r: refresh | q: quit"
 	}
@@ -724,7 +727,6 @@ func (m Model) handleAttachKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.view = viewOverview
 		m.attachedSession = nil
 		m.attachOutput = nil
-		m.inputBuffer = ""
 		m.rebuildViewport()
 		if m.conn != nil {
 			return m, detachSessionCmd(m.conn)
@@ -736,32 +738,8 @@ func (m Model) handleAttachKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case msg.Code == tea.KeyPgDown:
 		m.attachViewport.SetYOffset(m.attachViewport.YOffset() + 10)
 		return m, nil
-	default:
-		isActive := m.attachedSession != nil && (m.attachedSession.Status == "running" || m.attachedSession.Status == "pending")
-		if !isActive {
-			return m, nil
-		}
-		if msg.Code == tea.KeyEnter {
-			if m.inputBuffer != "" {
-				input := m.inputBuffer
-				m.inputBuffer = ""
-				if m.conn != nil {
-					return m, sendInputCmd(m.conn, m.attachedSession.ID, input)
-				}
-			}
-			return m, nil
-		}
-		if msg.Code == tea.KeyBackspace {
-			if len(m.inputBuffer) > 0 {
-				m.inputBuffer = m.inputBuffer[:len(m.inputBuffer)-1]
-			}
-			return m, nil
-		}
-		if msg.Text != "" {
-			m.inputBuffer += msg.Text
-		}
-		return m, nil
 	}
+	return m, nil
 }
 
 func (m Model) renderAttachView() tea.View {
@@ -793,21 +771,8 @@ func (m Model) renderAttachView() tea.View {
 	b.WriteString(attachSeparatorStyle.Render(strings.Repeat("─", width)))
 	b.WriteString("\n")
 
-	isActive := m.attachedSession != nil && (m.attachedSession.Status == "running" || m.attachedSession.Status == "pending")
-	if isActive {
-		inputLine := "  > " + m.inputBuffer + "█"
-		helpText := "esc: back | enter: send"
-		padding := width - len(inputLine) - len(helpText) - 2
-		if padding < 2 {
-			padding = 2
-		}
-		b.WriteString(attachInputStyle.Render(inputLine))
-		b.WriteString(strings.Repeat(" ", padding))
-		b.WriteString(statusBarStyle.Render(helpText))
-	} else {
-		helpText := "esc: back | pgup/pgdn: scroll"
-		b.WriteString(statusBarStyle.Render("  " + helpText))
-	}
+	helpText := "esc: back | pgup/pgdn: scroll"
+	b.WriteString(statusBarStyle.Render("  " + helpText))
 
 	v := tea.NewView(b.String())
 	v.AltScreen = true

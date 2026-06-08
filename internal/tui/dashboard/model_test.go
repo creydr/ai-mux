@@ -959,14 +959,13 @@ func TestModel_AttachEnterOnRunningSession(t *testing.T) {
 	m.activeTab = tabSessions
 	m.sessionCursor = 0
 
-	updated, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
-	m = updated.(Model)
+	_, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 
-	if m.attachedSession == nil {
-		t.Fatal("attachedSession should be set after Enter on running session")
+	if cmd == nil {
+		t.Fatal("Enter on running session should return tmux attach command")
 	}
-	if m.attachedSession.ID != "fix-1-abc" {
-		t.Errorf("expected session fix-1-abc, got %s", m.attachedSession.ID)
+	if m.attachedSession != nil {
+		t.Error("attachedSession should not be set for running sessions (uses tmux attach)")
 	}
 }
 
@@ -1031,10 +1030,9 @@ func TestModel_AttachViewRender(t *testing.T) {
 	m.width = 80
 	m.height = 30
 	m.attachedSession = &protocol.SessionPayload{
-		ID: "fix-1-abc", Repo: "o/r", Number: 1, Agent: "claude", Status: "running",
+		ID: "fix-1-abc", Repo: "o/r", Number: 1, Agent: "claude", Status: "completed",
 	}
 	m.attachOutput = []string{"hello world"}
-	m.inputBuffer = "test"
 	m.rebuildAttachViewport()
 
 	view := m.View()
@@ -1047,56 +1045,16 @@ func TestModel_AttachViewRender(t *testing.T) {
 	if !containsString(view.Content, "hello world") {
 		t.Error("attach view should show output")
 	}
-	if !containsString(view.Content, "> test") {
-		t.Error("attach view should show input buffer")
-	}
 	if !containsString(view.Content, "esc: back") {
 		t.Error("attach view should show help text")
-	}
-}
-
-func TestModel_AttachInputBuffer(t *testing.T) {
-	m := New(nil, 3, nil, "")
-	m.view = viewAttach
-	m.attachedSession = &protocol.SessionPayload{ID: "fix-1-abc", Status: "running"}
-
-	updated, _ := m.Update(tea.KeyPressMsg{Code: 'h', Text: "h"})
-	m = updated.(Model)
-	updated, _ = m.Update(tea.KeyPressMsg{Code: 'i', Text: "i"})
-	m = updated.(Model)
-
-	if m.inputBuffer != "hi" {
-		t.Errorf("expected input buffer 'hi', got %q", m.inputBuffer)
-	}
-
-	updated, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyBackspace})
-	m = updated.(Model)
-
-	if m.inputBuffer != "h" {
-		t.Errorf("expected input buffer 'h' after backspace, got %q", m.inputBuffer)
-	}
-}
-
-func TestModel_AttachInputClearsOnEnter(t *testing.T) {
-	m := New(nil, 3, nil, "")
-	m.view = viewAttach
-	m.attachedSession = &protocol.SessionPayload{ID: "fix-1-abc", Status: "running"}
-	m.inputBuffer = "hello"
-
-	updated, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
-	m = updated.(Model)
-
-	if m.inputBuffer != "" {
-		t.Errorf("input buffer should be cleared after Enter, got %q", m.inputBuffer)
 	}
 }
 
 func TestModel_AttachEscapeDetaches(t *testing.T) {
 	m := New(nil, 3, nil, "")
 	m.view = viewAttach
-	m.attachedSession = &protocol.SessionPayload{ID: "fix-1-abc", Status: "running"}
+	m.attachedSession = &protocol.SessionPayload{ID: "fix-1-abc", Status: "completed"}
 	m.attachOutput = []string{"some output"}
-	m.inputBuffer = "partial"
 
 	updated, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
 	m = updated.(Model)
@@ -1109,9 +1067,6 @@ func TestModel_AttachEscapeDetaches(t *testing.T) {
 	}
 	if m.attachOutput != nil {
 		t.Error("attachOutput should be nil after Escape")
-	}
-	if m.inputBuffer != "" {
-		t.Error("inputBuffer should be empty after Escape")
 	}
 }
 
@@ -1143,12 +1098,27 @@ func TestModel_AttachOutputIgnoredInOverview(t *testing.T) {
 func TestModel_AttachQuitDoesNotQuit(t *testing.T) {
 	m := New(nil, 3, nil, "")
 	m.view = viewAttach
-	m.attachedSession = &protocol.SessionPayload{ID: "fix-1-abc", Status: "running"}
+	m.attachedSession = &protocol.SessionPayload{ID: "fix-1-abc", Status: "completed"}
 
 	_, cmd := m.Update(tea.KeyPressMsg{Code: 'q', Text: "q"})
 
 	if cmd != nil {
-		t.Error("q should not quit in attach mode, should type 'q' instead")
+		t.Error("q should not quit in attach mode")
+	}
+}
+
+func TestModel_TmuxDetachedReturnsToOverview(t *testing.T) {
+	m := New(nil, 3, nil, "")
+	m.view = viewOverview
+	m.sessions = []protocol.SessionPayload{
+		{ID: "fix-1-abc", Status: "running"},
+	}
+
+	updated, _ := m.Update(tmuxDetachedMsg{})
+	m = updated.(Model)
+
+	if m.view != viewOverview {
+		t.Error("should be in overview after tmux detach")
 	}
 }
 

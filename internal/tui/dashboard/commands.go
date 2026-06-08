@@ -2,6 +2,7 @@ package dashboard
 
 import (
 	"encoding/json"
+	"fmt"
 	"os/exec"
 	"runtime"
 
@@ -189,20 +190,18 @@ func attachSessionCmd(conn protocol.Conn, sessionID string) tea.Cmd {
 	}
 }
 
+func tmuxAttachCmd(sessionID string) tea.Cmd {
+	tmuxName := "ai-mux-" + sessionID
+	c := exec.Command("sh", "-c",
+		fmt.Sprintf(`tmux set-option -t %q status-right " ctrl-b d: detach " 2>/dev/null; tmux attach-session -t %q`, tmuxName, tmuxName))
+	return tea.ExecProcess(c, func(err error) tea.Msg {
+		return tmuxDetachedMsg{err: err}
+	})
+}
+
 func detachSessionCmd(conn protocol.Conn) tea.Cmd {
 	return func() tea.Msg {
 		req, _ := protocol.NewRequest(protocol.MsgSessionDetach, "dash-detach", nil)
-		conn.Send(req)
-		return nil
-	}
-}
-
-func sendInputCmd(conn protocol.Conn, sessionID, input string) tea.Cmd {
-	return func() tea.Msg {
-		req, _ := protocol.NewRequest(protocol.MsgSessionInput, "dash-input", protocol.SessionInputPayload{
-			SessionID: sessionID,
-			Input:     input,
-		})
 		conn.Send(req)
 		return nil
 	}
