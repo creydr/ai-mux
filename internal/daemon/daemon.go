@@ -34,6 +34,7 @@ type Daemon struct {
 	clientsMu sync.RWMutex
 	nextID    int
 
+	ctx       context.Context
 	startTime time.Time
 	cancel    context.CancelFunc
 }
@@ -90,8 +91,9 @@ func New(cfg *config.Config, prov provider.Provider, st store.Store, transport p
 }
 
 func (d *Daemon) Start(ctx context.Context) error {
-	ctx, d.cancel = context.WithCancel(ctx)
+	d.ctx, d.cancel = context.WithCancel(ctx)
 	d.startTime = time.Now()
+	ctx = d.ctx
 
 	go func() {
 		if err := d.poller.Start(ctx); err != nil && ctx.Err() == nil {
@@ -271,9 +273,9 @@ func (d *Daemon) handleListItems(cc *clientConn, msg protocol.Message, itemType 
 			var fetchErr error
 			opts := provider.ListOptions{State: "open", Limit: payload.Limit}
 			if itemType == provider.ItemTypeIssue {
-				items, fetchErr = d.provider.ListIssues(context.Background(), ref, opts)
+				items, fetchErr = d.provider.ListIssues(d.ctx, ref, opts)
 			} else {
-				items, fetchErr = d.provider.ListPRs(context.Background(), ref, opts)
+				items, fetchErr = d.provider.ListPRs(d.ctx, ref, opts)
 			}
 			if fetchErr != nil {
 				log.Printf("error listing %s for %s: %v", itemType, ref, fetchErr)
@@ -309,7 +311,7 @@ func (d *Daemon) handleGetItem(cc *clientConn, msg protocol.Message) {
 		return
 	}
 
-	item, err := d.provider.GetItem(context.Background(), ref, provider.ItemType(payload.Type), payload.Number)
+	item, err := d.provider.GetItem(d.ctx, ref, provider.ItemType(payload.Type), payload.Number)
 	if err != nil {
 		resp, _ := protocol.NewError(msg.ID, err.Error())
 		cc.conn.Send(resp)
