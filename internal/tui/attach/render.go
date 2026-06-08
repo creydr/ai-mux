@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/charmbracelet/glamour"
 	"github.com/creydr/ai-mux/internal/provider"
 )
 
@@ -24,11 +25,29 @@ func renderHeader(item *provider.Item) string {
 	return headerStyle.Render(title) + "\n" + meta
 }
 
-func renderBody(item *provider.Item) string {
+func renderBody(item *provider.Item, width int) string {
 	if item == nil || item.Body == "" {
 		return bodyStyle.Render("No description")
 	}
-	return bodyStyle.Render(item.Body)
+	return renderMarkdown(item.Body, width)
+}
+
+func renderMarkdown(text string, width int) string {
+	if width <= 0 {
+		width = 80
+	}
+	r, err := glamour.NewTermRenderer(
+		glamour.WithAutoStyle(),
+		glamour.WithWordWrap(width-4),
+	)
+	if err != nil {
+		return bodyStyle.Render(text)
+	}
+	rendered, err := r.Render(text)
+	if err != nil {
+		return bodyStyle.Render(text)
+	}
+	return strings.TrimRight(rendered, "\n")
 }
 
 func renderReviews(reviews []provider.Review) string {

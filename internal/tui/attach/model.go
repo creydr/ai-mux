@@ -77,7 +77,7 @@ func (m Model) View() tea.View {
 
 	b.WriteString(renderHeader(m.item))
 	b.WriteString("\n\n")
-	b.WriteString(renderBody(m.item))
+	b.WriteString(renderBody(m.item, m.width))
 
 	if len(m.reviews) > 0 {
 		b.WriteString(renderReviews(m.reviews))
