@@ -15,6 +15,7 @@ type TmuxExecutor interface {
 	HasSession(name string) bool
 	PanePID(name string) (int, error)
 	PipePaneToFile(name, path string) error
+	CapturePane(name string) (string, error)
 }
 
 type tmuxCLI struct{}
@@ -28,6 +29,7 @@ func (t *tmuxCLI) NewSession(name, workdir, command string) error {
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("tmux new-session: %s: %w", strings.TrimSpace(string(out)), err)
 	}
+	exec.Command("tmux", "set-option", "-t", name, "remain-on-exit", "off").Run()
 	return nil
 }
 
@@ -95,4 +97,13 @@ func (t *tmuxCLI) PipePaneToFile(name, path string) error {
 		return fmt.Errorf("tmux pipe-pane: %s: %w", strings.TrimSpace(string(out)), err)
 	}
 	return nil
+}
+
+func (t *tmuxCLI) CapturePane(name string) (string, error) {
+	cmd := exec.Command("tmux", "capture-pane", "-t", name, "-p", "-e")
+	out, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("tmux capture-pane: %w", err)
+	}
+	return string(out), nil
 }

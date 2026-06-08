@@ -44,8 +44,9 @@ type Item struct {
 	URL       string
 	CreatedAt time.Time
 	UpdatedAt time.Time
-	Draft     bool
-	Mergeable *bool
+	HeadBranch string
+	Draft      bool
+	Mergeable  *bool
 }
 
 type Review struct {

@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/creydr/ai-mux/internal/config"
@@ -52,16 +53,16 @@ func TestRunner_BuildCommand(t *testing.T) {
 		Worktree: "/tmp/repo/.worktrees/fix-42",
 	}
 
-	cmd, err := r.BuildCommand("claude", "fix_issue", data)
+	cmdStr, err := r.BuildCommand("claude", "fix_issue", data)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if cmd.Path == "" {
-		t.Error("command path should be set")
+	if cmdStr == "" {
+		t.Error("command string should not be empty")
 	}
-	if cmd.Dir != "/tmp/repo/.worktrees/fix-42" {
-		t.Errorf("expected worktree dir, got %q", cmd.Dir)
+	if !strings.HasPrefix(cmdStr, "claude ") {
+		t.Errorf("expected command to start with 'claude ', got %q", cmdStr)
 	}
 }
 
@@ -72,12 +73,12 @@ func TestRunner_BuildCommand_MultiWordCommand(t *testing.T) {
 		Worktree: "/tmp/wt",
 	}
 
-	cmd, err := r.BuildCommand("gemini", "fix_issue", data)
+	cmdStr, err := r.BuildCommand("gemini", "fix_issue", data)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cmd.Args[0] != "gemini-cli" {
-		t.Errorf("expected 'gemini-cli', got %q", cmd.Args[0])
+	if !strings.HasPrefix(cmdStr, "gemini-cli run ") {
+		t.Errorf("expected 'gemini-cli run ...', got %q", cmdStr)
 	}
 }
 

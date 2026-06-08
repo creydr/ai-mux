@@ -49,7 +49,11 @@ func mapPR(repo provider.RepoRef, pr *gh.PullRequest) provider.Item {
 		Body:   pr.GetBody(),
 		State:  pr.GetState(),
 		URL:    pr.GetHTMLURL(),
-		Draft:  pr.GetDraft(),
+		Draft: pr.GetDraft(),
+	}
+
+	if pr.Head != nil {
+		item.HeadBranch = pr.Head.GetRef()
 	}
 
 	if pr.User != nil {

@@ -11,10 +11,11 @@ import (
 )
 
 type Model struct {
-	conn   protocol.Conn
-	ref    Ref
-	width  int
-	height int
+	conn     protocol.Conn
+	ref      Ref
+	width    int
+	height   int
+	embedded bool
 
 	item     *provider.Item
 	reviews  []provider.Review
@@ -27,6 +28,16 @@ func New(conn protocol.Conn, ref Ref) Model {
 	return Model{
 		conn: conn,
 		ref:  ref,
+	}
+}
+
+func NewEmbedded(conn protocol.Conn, ref Ref, width, height int) Model {
+	return Model{
+		conn:     conn,
+		ref:      ref,
+		embedded: true,
+		width:    width,
+		height:   height,
 	}
 }
 
@@ -80,7 +91,11 @@ func (m Model) View() tea.View {
 	}
 
 	b.WriteString("\n")
-	b.WriteString(statusStyle.Render("  j/k: scroll | r: refresh | o: open in browser | q: quit"))
+	if m.embedded {
+		b.WriteString(statusStyle.Render("  c: agent | j/k: scroll | r: refresh | o: browser | esc: back"))
+	} else {
+		b.WriteString(statusStyle.Render("  j/k: scroll | r: refresh | o: open in browser | q: quit"))
+	}
 
 	content := b.String()
 	lines := strings.Split(content, "\n")
@@ -113,7 +128,16 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return m, openBrowserCmd(m.item.URL)
 		}
 		return m, nil
+	case msg.Code == 'c':
+		if m.embedded {
+			ref := m.ref
+			return m, func() tea.Msg { return SpawnSessionMsg{Ref: ref} }
+		}
+		return m, nil
 	case msg.Code == 'q' || msg.Code == tea.KeyEscape:
+		if m.embedded {
+			return m, func() tea.Msg { return CloseMsg{} }
+		}
 		return m, tea.Quit
 	}
 	return m, nil

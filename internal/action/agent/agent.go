@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"fmt"
+	"os/exec"
 
 	"github.com/creydr/ai-mux/internal/action"
 	"github.com/creydr/ai-mux/internal/worktree"
@@ -66,11 +67,13 @@ func (a *AgentAction) Execute(_ context.Context, actCtx action.Context) action.R
 		Worktree: wtPath,
 	}
 
-	cmd, err := a.runner.BuildCommand(a.agentName, string(a.actionType), data)
+	cmdStr, err := a.runner.BuildCommand(a.agentName, string(a.actionType), data)
 	if err != nil {
 		return action.Result{Error: fmt.Errorf("building command: %w", err)}
 	}
 
+	cmd := exec.Command("sh", "-c", cmdStr)
+	cmd.Dir = wtPath
 	if err := cmd.Run(); err != nil {
 		return action.Result{
 			Error:   fmt.Errorf("agent exited with error: %w", err),

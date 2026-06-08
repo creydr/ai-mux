@@ -2,12 +2,10 @@ package session
 
 import (
 	"fmt"
-	"os/exec"
 	"sync"
 	"testing"
 	"time"
 
-	agentpkg "github.com/creydr/ai-mux/internal/action/agent"
 	"github.com/creydr/ai-mux/internal/config"
 )
 
@@ -85,6 +83,15 @@ func (m *mockTmux) PipePaneToFile(name, path string) error {
 	return nil
 }
 
+func (m *mockTmux) CapturePane(name string) (string, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if !m.sessions[name] {
+		return "", fmt.Errorf("session %q not found", name)
+	}
+	return "mock output", nil
+}
+
 type mockWorktrees struct {
 	mu      sync.Mutex
 	created map[string]string
@@ -96,6 +103,14 @@ func newMockWorktrees() *mockWorktrees {
 }
 
 func (m *mockWorktrees) Create(repoPath, name string) (string, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	path := repoPath + "/.worktrees/" + name
+	m.created[name] = path
+	return path, nil
+}
+
+func (m *mockWorktrees) CreateForPR(repoPath, name, repoFullName string, prNumber int) (string, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	path := repoPath + "/.worktrees/" + name
@@ -116,8 +131,8 @@ func (m *mockRunner) HasAgent(name string) bool {
 	return name == "claude"
 }
 
-func (m *mockRunner) BuildCommand(agentName, actionType string, data agentpkg.TemplateData) (*exec.Cmd, error) {
-	return exec.Command("echo", "mock-agent"), nil
+func (m *mockRunner) GetCommand(agentName string) string {
+	return "echo mock-agent"
 }
 
 func (m *mockRunner) GetPostSession(agentName string) string {

@@ -3,7 +3,6 @@ package agent
 import (
 	"bytes"
 	"fmt"
-	"os/exec"
 	"strings"
 	"text/template"
 
@@ -35,36 +34,40 @@ func (r *Runner) HasAgent(name string) bool {
 	return ok
 }
 
-func (r *Runner) BuildCommand(agentName, actionType string, data TemplateData) (*exec.Cmd, error) {
+func (r *Runner) BuildCommand(agentName, actionType string, data TemplateData) (string, error) {
 	agent, ok := r.agents[agentName]
 	if !ok {
-		return nil, fmt.Errorf("agent %q not configured", agentName)
+		return "", fmt.Errorf("agent %q not configured", agentName)
 	}
 
 	tmplStr, ok := agent.ArgsTemplates[actionType]
 	if !ok {
-		return nil, fmt.Errorf("agent %q has no template for action %q", agentName, actionType)
+		return "", fmt.Errorf("agent %q has no template for action %q", agentName, actionType)
 	}
 
 	tmpl, err := template.New("args").Parse(tmplStr)
 	if err != nil {
-		return nil, fmt.Errorf("parsing args template: %w", err)
+		return "", fmt.Errorf("parsing args template: %w", err)
 	}
 
 	var buf bytes.Buffer
 	if err := tmpl.Execute(&buf, data); err != nil {
-		return nil, fmt.Errorf("executing args template: %w", err)
+		return "", fmt.Errorf("executing args template: %w", err)
 	}
 
-	args := strings.Fields(buf.String())
-	parts := strings.Fields(agent.Command)
-	if len(parts) == 0 {
-		return nil, fmt.Errorf("agent %q has empty command", agentName)
+	cmdParts := strings.Fields(agent.Command)
+	if len(cmdParts) == 0 {
+		return "", fmt.Errorf("agent %q has empty command", agentName)
 	}
 
-	cmd := exec.Command(parts[0], append(parts[1:], args...)...)
-	cmd.Dir = data.Worktree
-	return cmd, nil
+	return strings.TrimSpace(agent.Command + " " + buf.String()), nil
+}
+
+func (r *Runner) GetCommand(agentName string) string {
+	if a, ok := r.agents[agentName]; ok {
+		return a.Command
+	}
+	return agentName
 }
 
 func (r *Runner) GetPostSession(agentName string) string {

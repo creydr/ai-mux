@@ -19,3 +19,9 @@ type commentsLoadedMsg struct {
 type errMsg struct {
 	err error
 }
+
+type CloseMsg struct{}
+
+type SpawnSessionMsg struct {
+	Ref Ref
+}

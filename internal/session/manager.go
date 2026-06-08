@@ -3,10 +3,9 @@ package session
 import (
 	"context"
 	"fmt"
-	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -14,7 +13,6 @@ import (
 
 	agentpkg "github.com/creydr/ai-mux/internal/action/agent"
 	"github.com/creydr/ai-mux/internal/config"
-	"github.com/creydr/ai-mux/internal/provider"
 	"github.com/creydr/ai-mux/internal/worktree"
 )
 
@@ -24,12 +22,13 @@ type StatusCallback func(sess *Session)
 
 type WorktreeCreator interface {
 	Create(repoPath, name string) (string, error)
+	CreateForPR(repoPath, name, repoFullName string, prNumber int) (string, error)
 	Remove(repoPath, wtPath string) error
 }
 
 type CommandBuilder interface {
 	HasAgent(name string) bool
-	BuildCommand(agentName, actionType string, data agentpkg.TemplateData) (*exec.Cmd, error)
+	GetCommand(agentName string) string
 	GetPostSession(agentName string) string
 }
 
@@ -154,38 +153,19 @@ func (m *Manager) Spawn(itemRepo string, itemNumber int, itemType string, agentN
 	}
 
 	wtName := fmt.Sprintf("%s-%s-%d", itemType, agentName, itemNumber)
-	wtPath, err := m.worktrees.Create(repo.Path, wtName)
+	var wtPath string
+	var err error
+	if itemType == "pr" {
+		wtPath, err = m.worktrees.CreateForPR(repo.Path, wtName, itemRepo, itemNumber)
+	} else {
+		wtPath, err = m.worktrees.Create(repo.Path, wtName)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("creating worktree: %w", err)
 	}
 	sess.Worktree = wtPath
 
-	parts := strings.SplitN(itemRepo, "/", 2)
-	item := &provider.Item{
-		Number: itemNumber,
-		Repo: provider.RepoRef{
-			Owner: parts[0],
-			Repo:  parts[1],
-		},
-	}
-	actionType := "fix_issue"
-	if itemType == "pr" {
-		actionType = "review_pr"
-	}
-
-	data := agentpkg.TemplateData{
-		Item:     item,
-		Repo:     itemRepo,
-		RepoPath: repo.Path,
-		Worktree: wtPath,
-	}
-	cmd, err := m.runner.BuildCommand(agentName, actionType, data)
-	if err != nil {
-		m.worktrees.Remove(repo.Path, wtPath)
-		return nil, fmt.Errorf("building command: %w", err)
-	}
-
-	cmdStr := strings.Join(append([]string{cmd.Path}, cmd.Args[1:]...), " ")
+	cmdStr := m.runner.GetCommand(agentName)
 
 	sessOutputDir := filepath.Join(m.outputDir, id)
 	if err := os.MkdirAll(sessOutputDir, 0755); err != nil {
@@ -272,6 +252,8 @@ func (m *Manager) AttachOutput(sessionID string) (<-chan []byte, func(), error) 
 		m.mu.RUnlock()
 		return nil, nil, fmt.Errorf("session %q not found", sessionID)
 	}
+	active := sess.IsActive()
+	tmuxName := sess.TmuxSession
 	m.mu.RUnlock()
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -283,17 +265,21 @@ func (m *Manager) AttachOutput(sessionID string) (<-chan []byte, func(), error) 
 	m.outputSubs[sessionID] = append(m.outputSubs[sessionID], sub)
 	m.outputMu.Unlock()
 
-	outputLog := filepath.Join(m.outputDir, sessionID, "output.log")
-	go m.tailFile(ctx, outputLog, ch)
+	if active {
+		go m.pollCapturePane(ctx, tmuxName, ch)
+	} else {
+		outputLog := filepath.Join(m.outputDir, sessionID, "output.log")
+		go m.sendFileOnce(ctx, outputLog, ch)
+	}
 
 	cancelFn := func() {
 		cancel()
 		close(ch)
 		m.outputMu.Lock()
-		subs := m.outputSubs[sess.ID]
+		subs := m.outputSubs[sessionID]
 		for i, s := range subs {
 			if s == sub {
-				m.outputSubs[sess.ID] = append(subs[:i], subs[i+1:]...)
+				m.outputSubs[sessionID] = append(subs[:i], subs[i+1:]...)
 				break
 			}
 		}
@@ -453,8 +439,7 @@ func (m *Manager) notifyStatus(sess *Session) {
 	}
 }
 
-func (m *Manager) tailFile(ctx context.Context, path string, ch chan<- []byte) {
-	var offset int64
+func (m *Manager) pollCapturePane(ctx context.Context, tmuxName string, ch chan<- []byte) {
 	ticker := time.NewTicker(200 * time.Millisecond)
 	defer ticker.Stop()
 
@@ -463,29 +448,33 @@ func (m *Manager) tailFile(ctx context.Context, path string, ch chan<- []byte) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			f, err := os.Open(path)
+			output, err := m.tmux.CapturePane(tmuxName)
 			if err != nil {
 				continue
 			}
-
-			if offset > 0 {
-				f.Seek(offset, io.SeekStart)
-			}
-
-			buf := make([]byte, 4096)
-			n, err := f.Read(buf)
-			f.Close()
-
-			if n > 0 {
-				offset += int64(n)
-				data := make([]byte, n)
-				copy(data, buf[:n])
-				select {
-				case ch <- data:
-				case <-ctx.Done():
-					return
-				}
+			select {
+			case ch <- []byte(output):
+			case <-ctx.Done():
+				return
 			}
 		}
 	}
+}
+
+func (m *Manager) sendFileOnce(ctx context.Context, path string, ch chan<- []byte) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return
+	}
+	stripped := stripANSI(data)
+	select {
+	case ch <- stripped:
+	case <-ctx.Done():
+	}
+}
+
+var ansiRe = regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]|\x1b\][^\x07]*\x07|\x1b\[[\?]?[0-9;]*[a-zA-Z]`)
+
+func stripANSI(data []byte) []byte {
+	return ansiRe.ReplaceAll(data, nil)
 }

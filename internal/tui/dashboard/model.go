@@ -12,6 +12,7 @@ import (
 	"github.com/creydr/ai-mux/internal/event"
 	"github.com/creydr/ai-mux/internal/protocol"
 	"github.com/creydr/ai-mux/internal/provider"
+	"github.com/creydr/ai-mux/internal/tui/attach"
 )
 
 const headerLines = 6
@@ -22,7 +23,15 @@ type viewState int
 const (
 	viewOverview viewState = iota
 	viewAttach
+	viewItemDetail
+	viewAgentPicker
 )
+
+type spawnRequest struct {
+	repo     string
+	number   int
+	itemType string
+}
 
 type panel int
 
@@ -59,7 +68,11 @@ type Model struct {
 	sessions      []protocol.SessionPayload
 	sessionCursor int
 	sessionBadge  int
+	agents        []string
 	defaultAgent  string
+
+	agentCursor  int
+	pendingSpawn *spawnRequest
 
 	statusText   string
 	statusTickID int
@@ -69,9 +82,11 @@ type Model struct {
 	attachOutput    []string
 	attachViewport  viewport.Model
 	inputBuffer     string
+
+	itemDetail *attach.Model
 }
 
-func New(conn protocol.Conn, itemsPerRepo int, defaultAgent string) Model {
+func New(conn protocol.Conn, itemsPerRepo int, agents []string, defaultAgent string) Model {
 	if itemsPerRepo <= 0 {
 		itemsPerRepo = 3
 	}
@@ -91,6 +106,7 @@ func New(conn protocol.Conn, itemsPerRepo int, defaultAgent string) Model {
 		fullLoaded:     make(map[string]bool),
 		itemsPerRepo:   itemsPerRepo,
 		viewport:       vp,
+		agents:         agents,
 		defaultAgent:   defaultAgent,
 		attachViewport: avp,
 	}
@@ -122,6 +138,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.height = msg.Height
 		if m.view == viewAttach {
 			m.rebuildAttachViewport()
+		} else if m.view == viewItemDetail && m.itemDetail != nil {
+			updated, _ := m.itemDetail.Update(msg)
+			detail := updated.(attach.Model)
+			m.itemDetail = &detail
 		} else {
 			m.rebuildViewport()
 		}
@@ -160,9 +180,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case sessionSpawnedMsg:
 		m.sessions = append(m.sessions, msg.session)
-		m.statusText = fmt.Sprintf("Session started for %s#%d", msg.session.Repo, msg.session.Number)
-		m.rebuildViewport()
-		return m, m.scheduleStatusClear()
+		sess := msg.session
+		m.attachedSession = &sess
+		if m.conn != nil {
+			return m, attachSessionCmd(m.conn, sess.ID)
+		}
+		return m, nil
 	case sessionStoppedMsg:
 		for i, s := range m.sessions {
 			if s.ID == msg.sessionID {
@@ -181,6 +204,35 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.statusText = ""
 		}
 		return m, nil
+	case attach.CloseMsg:
+		m.view = viewOverview
+		m.itemDetail = nil
+		m.rebuildViewport()
+		return m, nil
+	case attach.SpawnSessionMsg:
+		if len(m.agents) == 0 {
+			m.statusText = "No agents configured"
+			m.view = viewOverview
+			m.itemDetail = nil
+			m.rebuildViewport()
+			return m, m.scheduleStatusClear()
+		}
+		itemType := "issue"
+		if msg.Ref.Type == provider.ItemTypePR {
+			itemType = "pr"
+		}
+		req := &spawnRequest{repo: msg.Ref.Owner + "/" + msg.Ref.Repo, number: msg.Ref.Number, itemType: itemType}
+		if m.defaultAgent != "" {
+			m.view = viewOverview
+			m.itemDetail = nil
+			m.rebuildViewport()
+			return m, spawnSessionCmd(m.conn, req.repo, req.number, req.itemType, m.defaultAgent)
+		}
+		m.pendingSpawn = req
+		m.agentCursor = 0
+		m.view = viewAgentPicker
+		m.itemDetail = nil
+		return m, nil
 	case sessionAttachedMsg:
 		m.view = viewAttach
 		m.attachOutput = nil
@@ -189,7 +241,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, listenAttachOutputCmd(m.conn)
 	case sessionOutputMsg:
 		if m.view == viewAttach {
-			m.attachOutput = append(m.attachOutput, msg.data)
+			m.attachOutput = []string{msg.data}
 			m.rebuildAttachViewport()
 			return m, listenAttachOutputCmd(m.conn)
 		}
@@ -199,6 +251,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, listenAttachOutputCmd(m.conn)
 		}
 		return m, nil
+	default:
+		if m.view == viewItemDetail && m.itemDetail != nil {
+			updated, cmd := m.itemDetail.Update(msg)
+			detail := updated.(attach.Model)
+			m.itemDetail = &detail
+			return m, cmd
+		}
 	}
 	return m, nil
 }
@@ -206,6 +265,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m Model) View() tea.View {
 	if m.view == viewAttach {
 		return m.renderAttachView()
+	}
+	if m.view == viewItemDetail && m.itemDetail != nil {
+		return m.itemDetail.View()
+	}
+	if m.view == viewAgentPicker {
+		return m.renderAgentPicker()
 	}
 
 	var b strings.Builder
@@ -302,6 +367,15 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.view == viewAttach {
 		return m.handleAttachKey(msg)
 	}
+	if m.view == viewAgentPicker {
+		return m.handleAgentPickerKey(msg)
+	}
+	if m.view == viewItemDetail && m.itemDetail != nil {
+		updated, cmd := m.itemDetail.Update(msg)
+		detail := updated.(attach.Model)
+		m.itemDetail = &detail
+		return m, cmd
+	}
 
 	switch {
 	case msg.Code == 'h' || msg.Code == tea.KeyLeft:
@@ -369,11 +443,9 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if m.activeTab == tabSessions {
 			if m.sessionCursor >= 0 && m.sessionCursor < len(m.sessions) {
 				sess := m.sessions[m.sessionCursor]
-				if sess.Status == "running" || sess.Status == "pending" {
-					m.attachedSession = &sess
-					if m.conn != nil {
-						return m, attachSessionCmd(m.conn, sess.ID)
-					}
+				m.attachedSession = &sess
+				if m.conn != nil {
+					return m, attachSessionCmd(m.conn, sess.ID)
 				}
 			}
 			return m, nil
@@ -409,8 +481,17 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		item := m.selectedItem()
-		if item != nil && item.URL != "" {
-			return m, openBrowserCmd(item.URL)
+		if item != nil {
+			ref := attach.Ref{
+				Type:   item.Type,
+				Owner:  item.Repo.Owner,
+				Repo:   item.Repo.Repo,
+				Number: item.Number,
+			}
+			detail := attach.NewEmbedded(m.conn, ref, m.width, m.height)
+			m.itemDetail = &detail
+			m.view = viewItemDetail
+			return m, m.itemDetail.Init()
 		}
 		return m, nil
 	case msg.Code == 'o' || msg.Code == 'b':
@@ -423,18 +504,25 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if m.activeTab == tabSessions {
 			return m, nil
 		}
-		if m.defaultAgent == "" {
+		if len(m.agents) == 0 {
 			m.statusText = "No agents configured"
 			return m, m.scheduleStatusClear()
 		}
 		item := m.selectedItem()
-		if item != nil && m.conn != nil {
-			itemType := "issue"
-			if m.activeTab == tabPRs {
-				itemType = "pr"
-			}
-			return m, spawnSessionCmd(m.conn, item.Repo.String(), item.Number, itemType, m.defaultAgent)
+		if item == nil {
+			return m, nil
 		}
+		itemType := "issue"
+		if m.activeTab == tabPRs {
+			itemType = "pr"
+		}
+		req := &spawnRequest{repo: item.Repo.String(), number: item.Number, itemType: itemType}
+		if m.defaultAgent != "" {
+			return m, spawnSessionCmd(m.conn, req.repo, req.number, req.itemType, m.defaultAgent)
+		}
+		m.pendingSpawn = req
+		m.agentCursor = 0
+		m.view = viewAgentPicker
 		return m, nil
 	case msg.Code == 's':
 		if m.activeTab == tabSessions {
@@ -642,20 +730,6 @@ func (m Model) handleAttachKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return m, detachSessionCmd(m.conn)
 		}
 		return m, nil
-	case msg.Code == tea.KeyEnter:
-		if m.inputBuffer != "" && m.attachedSession != nil {
-			input := m.inputBuffer
-			m.inputBuffer = ""
-			if m.conn != nil {
-				return m, sendInputCmd(m.conn, m.attachedSession.ID, input)
-			}
-		}
-		return m, nil
-	case msg.Code == tea.KeyBackspace:
-		if len(m.inputBuffer) > 0 {
-			m.inputBuffer = m.inputBuffer[:len(m.inputBuffer)-1]
-		}
-		return m, nil
 	case msg.Code == tea.KeyPgUp:
 		m.attachViewport.SetYOffset(m.attachViewport.YOffset() - 10)
 		return m, nil
@@ -663,6 +737,26 @@ func (m Model) handleAttachKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.attachViewport.SetYOffset(m.attachViewport.YOffset() + 10)
 		return m, nil
 	default:
+		isActive := m.attachedSession != nil && (m.attachedSession.Status == "running" || m.attachedSession.Status == "pending")
+		if !isActive {
+			return m, nil
+		}
+		if msg.Code == tea.KeyEnter {
+			if m.inputBuffer != "" {
+				input := m.inputBuffer
+				m.inputBuffer = ""
+				if m.conn != nil {
+					return m, sendInputCmd(m.conn, m.attachedSession.ID, input)
+				}
+			}
+			return m, nil
+		}
+		if msg.Code == tea.KeyBackspace {
+			if len(m.inputBuffer) > 0 {
+				m.inputBuffer = m.inputBuffer[:len(m.inputBuffer)-1]
+			}
+			return m, nil
+		}
 		if msg.Text != "" {
 			m.inputBuffer += msg.Text
 		}
@@ -699,15 +793,21 @@ func (m Model) renderAttachView() tea.View {
 	b.WriteString(attachSeparatorStyle.Render(strings.Repeat("─", width)))
 	b.WriteString("\n")
 
-	inputLine := "  > " + m.inputBuffer + "█"
-	helpText := "esc: detach | enter: send"
-	padding := width - len(inputLine) - len(helpText) - 2
-	if padding < 2 {
-		padding = 2
+	isActive := m.attachedSession != nil && (m.attachedSession.Status == "running" || m.attachedSession.Status == "pending")
+	if isActive {
+		inputLine := "  > " + m.inputBuffer + "█"
+		helpText := "esc: back | enter: send"
+		padding := width - len(inputLine) - len(helpText) - 2
+		if padding < 2 {
+			padding = 2
+		}
+		b.WriteString(attachInputStyle.Render(inputLine))
+		b.WriteString(strings.Repeat(" ", padding))
+		b.WriteString(statusBarStyle.Render(helpText))
+	} else {
+		helpText := "esc: back | pgup/pgdn: scroll"
+		b.WriteString(statusBarStyle.Render("  " + helpText))
 	}
-	b.WriteString(attachInputStyle.Render(inputLine))
-	b.WriteString(strings.Repeat(" ", padding))
-	b.WriteString(statusBarStyle.Render(helpText))
 
 	v := tea.NewView(b.String())
 	v.AltScreen = true
@@ -732,10 +832,69 @@ func (m *Model) rebuildAttachViewport() {
 		chunkLines := strings.Split(chunk, "\n")
 		lines = append(lines, chunkLines...)
 	}
+	for len(lines) > 0 && strings.TrimSpace(lines[len(lines)-1]) == "" {
+		lines = lines[:len(lines)-1]
+	}
 	if len(lines) == 0 {
 		lines = []string{statusBarStyle.Render("  Waiting for output...")}
 	}
 
 	m.attachViewport.SetContentLines(lines)
-	m.attachViewport.GotoBottom()
+}
+
+func (m Model) handleAgentPickerKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	switch {
+	case msg.Code == tea.KeyEscape || msg.Code == 'q':
+		m.view = viewOverview
+		m.pendingSpawn = nil
+		m.rebuildViewport()
+		return m, nil
+	case msg.Code == 'j' || msg.Code == tea.KeyDown:
+		if m.agentCursor < len(m.agents)-1 {
+			m.agentCursor++
+		}
+		return m, nil
+	case msg.Code == 'k' || msg.Code == tea.KeyUp:
+		if m.agentCursor > 0 {
+			m.agentCursor--
+		}
+		return m, nil
+	case msg.Code == tea.KeyEnter:
+		if m.pendingSpawn != nil && m.agentCursor < len(m.agents) && m.conn != nil {
+			agent := m.agents[m.agentCursor]
+			req := m.pendingSpawn
+			m.pendingSpawn = nil
+			m.view = viewOverview
+			m.rebuildViewport()
+			return m, spawnSessionCmd(m.conn, req.repo, req.number, req.itemType, agent)
+		}
+		return m, nil
+	}
+	return m, nil
+}
+
+func (m Model) renderAgentPicker() tea.View {
+	var b strings.Builder
+
+	b.WriteString(titleStyle.Render("  Select Agent"))
+	b.WriteString("\n\n")
+
+	if m.pendingSpawn != nil {
+		b.WriteString(fmt.Sprintf("  Spawning session for %s#%d\n\n", m.pendingSpawn.repo, m.pendingSpawn.number))
+	}
+
+	for i, name := range m.agents {
+		if i == m.agentCursor {
+			b.WriteString(selectedItemStyle.Render("> "+name) + "\n")
+		} else {
+			b.WriteString("  " + name + "\n")
+		}
+	}
+
+	b.WriteString("\n")
+	b.WriteString(statusBarStyle.Render("  enter: select | esc: cancel"))
+
+	v := tea.NewView(b.String())
+	v.AltScreen = true
+	return v
 }
