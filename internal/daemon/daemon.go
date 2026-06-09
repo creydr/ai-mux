@@ -257,11 +257,7 @@ func (d *Daemon) handleListItems(cc *clientConn, msg protocol.Message, itemType 
 		repos = []config.RepoConfig{{Name: payload.Repo}}
 	}
 
-	type result struct {
-		items []provider.Item
-	}
-
-	results := make([]result, len(repos))
+	results := make([][]provider.Item, len(repos))
 	var wg sync.WaitGroup
 
 	for i, r := range repos {
@@ -284,14 +280,14 @@ func (d *Daemon) handleListItems(cc *clientConn, msg protocol.Message, itemType 
 				log.Printf("error listing %s for %s: %v", itemType, ref, fetchErr)
 				return
 			}
-			results[idx] = result{items: items}
+			results[idx] = items
 		}(i, ref)
 	}
 	wg.Wait()
 
 	var allItems []provider.Item
-	for _, r := range results {
-		allItems = append(allItems, r.items...)
+	for _, items := range results {
+		allItems = append(allItems, items...)
 	}
 
 	itemsJSON, _ := json.Marshal(allItems)
