@@ -1,6 +1,6 @@
 # ai-mux
 
-A terminal-based tool for monitoring multiple GitHub repositories. Watches for new issues, PRs, and review activity with actionable integrations — spawn AI agent sessions to fix issues or review PRs, and interact with sessions from your IDE via ACP.
+A terminal-based tool for monitoring multiple GitHub repositories. Watches for new issues, PRs, and review activity with actionable integrations — spawn AI agent sessions to fix issues or review PRs directly from the dashboard.
 
 ## Architecture
 
@@ -9,16 +9,15 @@ A terminal-based tool for monitoring multiple GitHub repositories. Watches for n
 - **Daemon** — background process that polls GitHub, maintains state, manages sessions, and serves clients over a Unix socket
 - **Dashboard** — full-screen TUI showing all watched repos with tabbed Issues/PRs/Sessions views
 - **Attach** — focused TUI for a single issue or PR with markdown rendering
-- **ACP Agent** — IDE integration via JSON-RPC over stdio for listing items and managing agent sessions
 
 ```
-┌──────────────┐     ┌──────────────┐     ┌──────────────┐
-│  Dashboard   │     │   Attach     │     │  ACP Agent   │
-│   (TUI)      │     │   (TUI)      │     │  (IDE/stdio) │
-└──────┬───────┘     └──────┬───────┘     └──────┬───────┘
-       │                    │                    │
-       └────────────┬───────┴────────────────────┘
-                    │ Unix socket (JSON lines)
+┌──────────────┐     ┌──────────────┐
+│  Dashboard   │     │   Attach     │
+│   (TUI)      │     │   (TUI)      │
+└──────┬───────┘     └──────┬───────┘
+       │                    │
+       └────────┬───────────┘
+                │ Unix socket (JSON lines)
               ┌─────┴──────┐
               │   Daemon   │
               │            │
@@ -148,41 +147,6 @@ Keyboard shortcuts:
 - `r` — refresh
 - `q` / `Esc` — quit
 
-### ACP (IDE Integration)
-
-```sh
-# Start the ACP agent (communicates over stdin/stdout)
-ai-mux acp
-```
-
-The ACP agent uses JSON-RPC 2.0 over stdio. Configure your IDE to launch `ai-mux acp` as an external tool, or interact with it directly:
-
-```sh
-echo '{"jsonrpc":"2.0","id":1,"method":"session/list","params":{}}' | ai-mux acp
-```
-
-**Supported methods:**
-
-| Method | Description |
-|--------|-------------|
-| `initialize` | Handshake, returns server capabilities |
-| `items/list` | List issues from watched repos |
-| `session/new` | Spawn an agent session (`repo`, `number`, `itemType`, `agent`) |
-| `session/list` | List active sessions |
-| `session/stop` | Stop a session (`sessionId`) |
-| `session/prompt` | Send input to a session (`sessionId`, `prompt`) |
-| `session/attach` | Attach to session output, streams via `session/output` notifications |
-
-**Example: spawn a session**
-```json
-{"jsonrpc":"2.0","id":1,"method":"session/new","params":{"repo":"owner/repo","number":42,"itemType":"issue","agent":"claude"}}
-```
-
-**Example: list sessions**
-```json
-{"jsonrpc":"2.0","id":2,"method":"session/list","params":{}}
-```
-
 ## Configuration Reference
 
 | Field | Type | Default | Description |
@@ -201,7 +165,7 @@ echo '{"jsonrpc":"2.0","id":1,"method":"session/list","params":{}}' | ai-mux acp
 | `notifications.desktop.enabled` | bool | `false` | Enable desktop notifications |
 | `notifications.desktop.events` | list | all | Event types to notify on |
 | `dashboard.items_per_repo` | int | `3` | Items shown per repo before expanding |
-| `acp.socket` | string | `/tmp/ai-mux.sock` | Unix socket path |
+| `daemon.socket` | string | `/tmp/ai-mux.sock` | Unix socket path |
 
 ### Worktree Isolation
 
@@ -237,7 +201,6 @@ make integration-test
 ```
 cmd/ai-mux/          CLI entrypoint and cobra commands
 internal/
-  acp/               ACP agent (JSON-RPC IDE integration)
   action/
     browser/         Open-in-browser helper
   config/            Configuration loading and validation
@@ -258,7 +221,7 @@ internal/
   tui/               Terminal UI
     attach/          Single-item focused view with markdown rendering
     dashboard/       Multi-repo dashboard with tabs and session management
-  worktree/          Git worktree management and post-session handlers
+  worktree/          Git worktree management
 ```
 
 ### Key Interfaces

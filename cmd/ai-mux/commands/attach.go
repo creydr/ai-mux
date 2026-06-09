@@ -29,7 +29,7 @@ func runAttach(cmd *cobra.Command, args []string) error {
 	}
 
 	transport := jsonlines.NewTransport()
-	conn, err := transport.Dial(cfg.ACP.Socket)
+	conn, err := transport.Dial(cfg.Daemon.Socket)
 	if err != nil {
 		return fmt.Errorf("connecting to daemon: %w (is the daemon running?)", err)
 	}

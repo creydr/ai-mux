@@ -22,7 +22,7 @@ func testConfig(t *testing.T) *config.Config {
 	return &config.Config{
 		Repos:        []config.RepoConfig{{Name: "owner/repo", Path: "/tmp/repo"}},
 		PollInterval: config.Duration{Duration: time.Hour},
-		ACP:          config.ACPConfig{Socket: filepath.Join(t.TempDir(), "test.sock")},
+		Daemon:       config.DaemonConfig{Socket: filepath.Join(t.TempDir(), "test.sock")},
 	}
 }
 
@@ -120,7 +120,7 @@ func TestDaemon_StartAndStop(t *testing.T) {
 
 	_, cancel := startDaemon(t, cfg, prov)
 
-	conn := dial(t, cfg.ACP.Socket)
+	conn := dial(t, cfg.Daemon.Socket)
 	sendRequest(t, conn, protocol.MsgGetStatus, "1", nil)
 	resp := receiveWithTimeout(t, conn, 2*time.Second)
 
@@ -149,7 +149,7 @@ func TestDaemon_ListIssues(t *testing.T) {
 
 	startDaemon(t, cfg, prov)
 
-	conn := dial(t, cfg.ACP.Socket)
+	conn := dial(t, cfg.Daemon.Socket)
 	sendRequest(t, conn, protocol.MsgListIssues, "1", protocol.ListPayload{})
 	resp := receiveWithTimeout(t, conn, 2*time.Second)
 
@@ -172,7 +172,7 @@ func TestDaemon_ListPRs(t *testing.T) {
 
 	startDaemon(t, cfg, prov)
 
-	conn := dial(t, cfg.ACP.Socket)
+	conn := dial(t, cfg.Daemon.Socket)
 	sendRequest(t, conn, protocol.MsgListPRs, "1", protocol.ListPayload{})
 	resp := receiveWithTimeout(t, conn, 2*time.Second)
 
@@ -193,7 +193,7 @@ func TestDaemon_ListIssues_FilteredByRepo(t *testing.T) {
 			{Name: "owner/repo2", Path: "/tmp/repo2"},
 		},
 		PollInterval: config.Duration{Duration: time.Hour},
-		ACP:          config.ACPConfig{Socket: filepath.Join(t.TempDir(), "test.sock")},
+		Daemon:       config.DaemonConfig{Socket: filepath.Join(t.TempDir(), "test.sock")},
 	}
 	prov := mock.New()
 	prov.AddIssues(provider.RepoRef{Owner: "owner", Repo: "repo1"},
@@ -205,7 +205,7 @@ func TestDaemon_ListIssues_FilteredByRepo(t *testing.T) {
 
 	startDaemon(t, cfg, prov)
 
-	conn := dial(t, cfg.ACP.Socket)
+	conn := dial(t, cfg.Daemon.Socket)
 	sendRequest(t, conn, protocol.MsgListIssues, "1", protocol.ListPayload{Repo: "owner/repo1"})
 	resp := receiveWithTimeout(t, conn, 2*time.Second)
 
@@ -228,7 +228,7 @@ func TestDaemon_GetItem(t *testing.T) {
 
 	startDaemon(t, cfg, prov)
 
-	conn := dial(t, cfg.ACP.Socket)
+	conn := dial(t, cfg.Daemon.Socket)
 	sendRequest(t, conn, protocol.MsgGetItem, "1", protocol.GetItemPayload{Repo: "owner/repo", Type: "issue", Number: 5})
 	resp := receiveWithTimeout(t, conn, 2*time.Second)
 
@@ -248,7 +248,7 @@ func TestDaemon_MarkRead(t *testing.T) {
 
 	d.store.SetItemState(store.ItemState{ItemID: "test-item", Read: false, LastSeenAt: time.Now()})
 
-	conn := dial(t, cfg.ACP.Socket)
+	conn := dial(t, cfg.Daemon.Socket)
 	sendRequest(t, conn, protocol.MsgMarkRead, "1", protocol.MarkReadPayload{ItemID: "test-item"})
 	resp := receiveWithTimeout(t, conn, 2*time.Second)
 
@@ -268,7 +268,7 @@ func TestDaemon_Subscribe_ReceivesEvents(t *testing.T) {
 
 	d, _ := startDaemon(t, cfg, prov)
 
-	conn := dial(t, cfg.ACP.Socket)
+	conn := dial(t, cfg.Daemon.Socket)
 	sendRequest(t, conn, protocol.MsgSubscribe, "1", nil)
 
 	subResp := receiveWithTimeout(t, conn, 2*time.Second)
@@ -297,8 +297,8 @@ func TestDaemon_MultipleClients(t *testing.T) {
 
 	startDaemon(t, cfg, prov)
 
-	conn1 := dial(t, cfg.ACP.Socket)
-	conn2 := dial(t, cfg.ACP.Socket)
+	conn1 := dial(t, cfg.Daemon.Socket)
+	conn2 := dial(t, cfg.Daemon.Socket)
 
 	sendRequest(t, conn1, protocol.MsgListIssues, "1", protocol.ListPayload{})
 	sendRequest(t, conn2, protocol.MsgListIssues, "2", protocol.ListPayload{})
@@ -320,7 +320,7 @@ func TestDaemon_UnknownMessageType(t *testing.T) {
 
 	startDaemon(t, cfg, prov)
 
-	conn := dial(t, cfg.ACP.Socket)
+	conn := dial(t, cfg.Daemon.Socket)
 	sendRequest(t, conn, "bogus_type", "1", nil)
 	resp := receiveWithTimeout(t, conn, 2*time.Second)
 

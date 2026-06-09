@@ -188,8 +188,8 @@ func TestDefault(t *testing.T) {
 	if cfg.GitHub.TokenFrom != "gh" {
 		t.Errorf("expected default token_from gh, got %s", cfg.GitHub.TokenFrom)
 	}
-	if cfg.ACP.Socket != "/tmp/ai-mux.sock" {
-		t.Errorf("expected default socket /tmp/ai-mux.sock, got %s", cfg.ACP.Socket)
+	if cfg.Daemon.Socket != "/tmp/ai-mux.sock" {
+		t.Errorf("expected default socket /tmp/ai-mux.sock, got %s", cfg.Daemon.Socket)
 	}
 	if cfg.Dashboard.ItemsPerRepo != 3 {
 		t.Errorf("expected default items_per_repo 3, got %d", cfg.Dashboard.ItemsPerRepo)

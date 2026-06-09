@@ -101,7 +101,7 @@ func runDaemonStart(cmd *cobra.Command, args []string) error {
 		cancel()
 	}()
 
-	fmt.Fprintf(cmd.OutOrStdout(), "daemon started (pid %d), listening on %s\n", os.Getpid(), cfg.ACP.Socket)
+	fmt.Fprintf(cmd.OutOrStdout(), "daemon started (pid %d), listening on %s\n", os.Getpid(), cfg.Daemon.Socket)
 	err = d.Start(ctx)
 	daemon.RemovePIDFile(pidPath)
 	return err
@@ -144,7 +144,7 @@ func runDaemonStatus(cmd *cobra.Command, args []string) error {
 	}
 
 	transport := jsonlines.NewTransport()
-	conn, err := transport.Dial(cfg.ACP.Socket)
+	conn, err := transport.Dial(cfg.Daemon.Socket)
 	if err != nil {
 		fmt.Fprintf(cmd.OutOrStdout(), "daemon is running (pid %d) but not reachable\n", pid)
 		return nil

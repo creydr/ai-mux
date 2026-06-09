@@ -61,7 +61,7 @@ func New(cfg *config.Config, prov provider.Provider, st store.Store, transport p
 
 	p := poller.New(prov, st, bus, repos, cfg.PollInterval.Duration)
 
-	ln, err := transport.Listen(cfg.ACP.Socket)
+	ln, err := transport.Listen(cfg.Daemon.Socket)
 	if err != nil {
 		return nil, fmt.Errorf("starting listener: %w", err)
 	}

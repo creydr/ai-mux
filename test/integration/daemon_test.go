@@ -29,7 +29,7 @@ func TestIntegration_FullDaemonFlow(t *testing.T) {
 			{Name: "test/repo", Path: "/tmp/test-repo"},
 		},
 		PollInterval: config.Duration{Duration: time.Hour},
-		ACP:          config.ACPConfig{Socket: socketPath},
+		Daemon:       config.DaemonConfig{Socket: socketPath},
 	}
 
 	prov := mock.New()

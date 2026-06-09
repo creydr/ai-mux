@@ -17,7 +17,7 @@ type Config struct {
 	Notifications NotifyConfig    `yaml:"notifications"`
 	Agents        []AgentConfig   `yaml:"agents"`
 	DefaultAgent  string          `yaml:"default_agent"`
-	ACP           ACPConfig       `yaml:"acp"`
+	Daemon        DaemonConfig    `yaml:"daemon"`
 	Dashboard     DashboardConfig `yaml:"dashboard"`
 }
 
@@ -46,7 +46,7 @@ type AgentConfig struct {
 	Command string `yaml:"command"`
 }
 
-type ACPConfig struct {
+type DaemonConfig struct {
 	Socket string `yaml:"socket"`
 }
 
@@ -87,7 +87,7 @@ func Default() *Config {
 	return &Config{
 		PollInterval: Duration{30 * time.Second},
 		GitHub:       GitHubConfig{TokenFrom: "gh"},
-		ACP:          ACPConfig{Socket: "/tmp/ai-mux.sock"},
+		Daemon:       DaemonConfig{Socket: "/tmp/ai-mux.sock"},
 		Dashboard:    DashboardConfig{ItemsPerRepo: 3},
 	}
 }
