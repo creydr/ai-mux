@@ -82,6 +82,7 @@ type SessionSpawnPayload struct {
 
 type SessionPayload struct {
 	ID           string `json:"id"`
+	Name         string `json:"name,omitempty"`
 	Repo         string `json:"repo"`
 	Number       int    `json:"number"`
 	ItemType     string `json:"item_type"`
@@ -108,4 +109,9 @@ type SessionInputPayload struct {
 
 type SessionIDPayload struct {
 	SessionID string `json:"session_id"`
+}
+
+type SessionRenamePayload struct {
+	SessionID string `json:"session_id"`
+	Name      string `json:"name"`
 }

@@ -18,6 +18,7 @@ const (
 
 type Session struct {
 	ID           string     `json:"id"`
+	Name         string     `json:"name,omitempty"`
 	ItemRepo     string     `json:"item_repo"`
 	ItemNumber   int        `json:"item_number"`
 	ItemType     string     `json:"item_type"`

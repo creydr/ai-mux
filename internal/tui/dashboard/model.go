@@ -86,6 +86,10 @@ type Model struct {
 	attachViewport  viewport.Model
 
 	itemDetail *attach.Model
+
+	renameActive    bool
+	renameInput     string
+	renamingSession string
 }
 
 func New(conn protocol.Conn, itemsPerRepo int, agents []string, defaultAgent string) Model {
@@ -190,6 +194,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, fetchSessionsCmd(m.conn)
 		}
 		return m, nil
+	case sessionRenamedMsg:
+		for i, s := range m.sessions {
+			if s.ID == msg.sessionID {
+				m.sessions[i].Name = msg.name
+				break
+			}
+		}
+		m.statusText = "Session renamed"
+		m.rebuildViewport()
+		return m, m.scheduleStatusClear()
 	case sessionStoppedMsg:
 		for i, s := range m.sessions {
 			if s.ID == msg.sessionID {
@@ -212,6 +226,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.view = viewOverview
 		m.itemDetail = nil
 		m.rebuildViewport()
+		return m, nil
+	case attach.AttachSessionMsg:
+		m.view = viewOverview
+		m.itemDetail = nil
+		m.rebuildViewport()
+		if msg.Status == "running" || msg.Status == "pending" {
+			return m, tmuxAttachCmd(msg.SessionID)
+		}
+		m.attachedSession = &protocol.SessionPayload{ID: msg.SessionID, Status: msg.Status}
+		if m.conn != nil {
+			return m, attachSessionCmd(m.conn, msg.SessionID)
+		}
 		return m, nil
 	case attach.SpawnSessionMsg:
 		if len(m.agents) == 0 {
@@ -301,7 +327,13 @@ func (m Model) View() tea.View {
 	if m.loading && len(m.issues) == 0 && len(m.prs) == 0 {
 		b.WriteString(statusBarStyle.Render("  Loading..."))
 	} else if m.activeTab == tabSessions {
-		b.WriteString(m.viewport.View())
+		if m.renameActive {
+			b.WriteString(m.viewport.View())
+			b.WriteString("\n")
+			b.WriteString(statusBarStyle.Render(fmt.Sprintf("  Rename: %s█", m.renameInput)))
+		} else {
+			b.WriteString(m.viewport.View())
+		}
 	} else {
 		panelStr := renderSidePanel(m.repos, m.repoCursor, m.selectedRepo, m.focusPanel == panelRepos, vpHeight)
 
@@ -373,6 +405,9 @@ func (m *Model) rebuildViewport() {
 func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if msg.Code == 'c' && msg.Mod.Contains(tea.ModCtrl) {
 		return m, tea.Quit
+	}
+	if m.renameActive {
+		return m.handleRenameKey(msg)
 	}
 	if m.view == viewAttach {
 		return m.handleAttachKey(msg)
@@ -557,6 +592,15 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 					}
 				}
 			}
+		}
+		return m, nil
+	case msg.Code == 'n':
+		if m.activeTab == tabSessions && m.sessionCursor >= 0 && m.sessionCursor < len(m.sessions) {
+			sess := m.sessions[m.sessionCursor]
+			m.renameActive = true
+			m.renamingSession = sess.ID
+			m.renameInput = sess.Name
+			return m, nil
 		}
 		return m, nil
 	case msg.Code == 'r':
@@ -744,11 +788,44 @@ func (m *Model) scheduleStatusClear() tea.Cmd {
 }
 
 func (m Model) statusBarText() string {
+	if m.renameActive {
+		return "enter: confirm | esc: cancel"
+	}
 	switch m.activeTab {
 	case tabSessions:
-		return "enter: attach (ctrl-b d: detach) | s: stop | tab: switch | ctrl-c: quit"
+		return "enter: attach | n: rename | s: stop | tab: switch | ctrl-c: quit"
 	default:
 		return "a: spawn agent | b: open in browser | tab: switch | r: refresh | ctrl-c: quit"
+	}
+}
+
+func (m Model) handleRenameKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	switch {
+	case msg.Code == tea.KeyEnter:
+		name := m.renameInput
+		sessionID := m.renamingSession
+		m.renameActive = false
+		m.renamingSession = ""
+		m.renameInput = ""
+		if m.conn != nil {
+			return m, renameSessionCmd(m.conn, sessionID, name)
+		}
+		return m, nil
+	case msg.Code == tea.KeyEscape:
+		m.renameActive = false
+		m.renamingSession = ""
+		m.renameInput = ""
+		return m, nil
+	case msg.Code == tea.KeyBackspace:
+		if len(m.renameInput) > 0 {
+			m.renameInput = m.renameInput[:len(m.renameInput)-1]
+		}
+		return m, nil
+	default:
+		if msg.Text != "" {
+			m.renameInput += msg.Text
+		}
+		return m, nil
 	}
 }
 

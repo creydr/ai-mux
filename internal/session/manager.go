@@ -436,6 +436,19 @@ func (m *Manager) Reconcile() error {
 	return nil
 }
 
+func (m *Manager) Rename(sessionID, name string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	sess, ok := m.sessions[sessionID]
+	if !ok {
+		return fmt.Errorf("session %q not found", sessionID)
+	}
+	sess.Name = name
+	m.persist()
+	return nil
+}
+
 func (m *Manager) FindByItem(repo string, number int) *Session {
 	m.mu.RLock()
 	defer m.mu.RUnlock()

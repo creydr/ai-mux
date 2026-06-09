@@ -18,6 +18,7 @@ const (
 	MsgSessionDetach MessageType = "session_detach"
 	MsgSessionInput  MessageType = "session_input"
 	MsgSessionStop   MessageType = "session_stop"
+	MsgSessionRename MessageType = "session_rename"
 
 	MsgWorktreeExists MessageType = "worktree_exists"
 

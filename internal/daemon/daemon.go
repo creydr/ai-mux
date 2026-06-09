@@ -227,6 +227,8 @@ func (d *Daemon) handleMessage(cc *clientConn, msg protocol.Message) {
 		d.handleSessionDetach(cc, msg)
 	case protocol.MsgSessionInput:
 		d.handleSessionInput(cc, msg)
+	case protocol.MsgSessionRename:
+		d.handleSessionRename(cc, msg)
 	default:
 		resp, _ := protocol.NewError(msg.ID, fmt.Sprintf("unknown message type: %s", msg.Type))
 		cc.conn.Send(resp)
@@ -520,9 +522,34 @@ func (d *Daemon) handleSessionInput(cc *clientConn, msg protocol.Message) {
 	cc.conn.Send(resp)
 }
 
+func (d *Daemon) handleSessionRename(cc *clientConn, msg protocol.Message) {
+	if d.sessionMgr == nil {
+		resp, _ := protocol.NewError(msg.ID, "no agents configured")
+		cc.conn.Send(resp)
+		return
+	}
+
+	payload, err := protocol.ParsePayload[protocol.SessionRenamePayload](msg)
+	if err != nil {
+		resp, _ := protocol.NewError(msg.ID, err.Error())
+		cc.conn.Send(resp)
+		return
+	}
+
+	if err := d.sessionMgr.Rename(payload.SessionID, payload.Name); err != nil {
+		resp, _ := protocol.NewError(msg.ID, err.Error())
+		cc.conn.Send(resp)
+		return
+	}
+
+	resp, _ := protocol.NewResponse(msg.ID, map[string]string{"status": "renamed"})
+	cc.conn.Send(resp)
+}
+
 func sessionToPayload(s *session.Session) protocol.SessionPayload {
 	return protocol.SessionPayload{
 		ID:           s.ID,
+		Name:         s.Name,
 		Repo:         s.ItemRepo,
 		Number:       s.ItemNumber,
 		ItemType:     s.ItemType,

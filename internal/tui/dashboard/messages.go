@@ -74,3 +74,8 @@ type worktreeExistsMsg struct {
 	itemType string
 	agent    string
 }
+
+type sessionRenamedMsg struct {
+	sessionID string
+	name      string
+}

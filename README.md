@@ -99,6 +99,7 @@ Keyboard shortcuts:
 **Item detail view:**
 - Arrow keys — scroll content
 - `a` — spawn agent session for this item
+- `t` — attach to an existing session for this item
 - `o` — open in browser
 - `r` — refresh
 - `Esc` — back to list
@@ -106,6 +107,7 @@ Keyboard shortcuts:
 **Sessions tab:**
 - Arrow keys — navigate sessions
 - `Enter` — attach to session (opens tmux)
+- `n` — rename selected session
 - `s` — stop selected session
 - `Ctrl-c` — quit
 
@@ -120,6 +122,9 @@ ai-mux session attach <session-id>
 
 # View output of a completed session
 ai-mux session attach <session-id>
+
+# Rename a session
+ai-mux session rename <session-id> "descriptive name"
 ```
 
 For running/pending sessions, `attach` opens the tmux session directly. For completed/failed/stopped sessions, it streams the captured output to stdout.
@@ -146,7 +151,7 @@ For running/pending sessions, `attach` opens the tmux session directly. For comp
 
 ### Worktree Isolation
 
-Every agent session runs in an isolated git worktree at `<repo-path>/.worktrees/<action>-<number>`. This allows multiple agent sessions to run in parallel without interfering with each other or the current checkout. Worktrees with no changes are cleaned up automatically.
+Every agent session runs in an isolated git worktree at `<repo-path>/.worktrees/<action>-<number>`. This allows multiple agent sessions to run in parallel without interfering with each other or the current checkout. When multiple sessions target the same PR, each gets its own worktree with a unique branch (`ai-mux/<name>`) so they don't conflict. Worktrees with no changes are cleaned up automatically.
 
 ## Development
 

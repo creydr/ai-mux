@@ -1,6 +1,7 @@
 package attach
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -24,6 +25,11 @@ type Model struct {
 	err      error
 
 	renderedLines []string
+
+	sessions      []protocol.SessionPayload
+	sessionPicker bool
+	sessionCursor int
+	statusText    string
 }
 
 func New(conn protocol.Conn, ref Ref) Model {
@@ -77,6 +83,23 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case errMsg:
 		m.err = msg.err
 		return m, renderContentCmd(m.item, m.reviews, m.comments, m.width, m.err)
+	case sessionsLoadedMsg:
+		if len(msg.sessions) == 0 {
+			m.statusText = "No sessions for this item"
+			return m, nil
+		}
+		if len(msg.sessions) == 1 {
+			return m, func() tea.Msg {
+				return AttachSessionMsg{SessionID: msg.sessions[0].ID, Status: msg.sessions[0].Status}
+			}
+		}
+		m.sessions = msg.sessions
+		m.sessionCursor = 0
+		m.sessionPicker = true
+		return m, nil
+	case statusTextMsg:
+		m.statusText = msg.text
+		return m, nil
 	}
 	return m, nil
 }
@@ -101,9 +124,15 @@ func renderContentCmd(item *provider.Item, reviews []provider.Review, comments [
 }
 
 func (m Model) View() tea.View {
+	if m.sessionPicker {
+		return m.viewSessionPicker()
+	}
+
 	statusBar := "\n"
-	if m.embedded {
-		statusBar += statusStyle.Render("  a: spawn agent | r: refresh | o: open in browser | esc: back")
+	if m.statusText != "" {
+		statusBar += statusStyle.Render("  " + m.statusText)
+	} else if m.embedded {
+		statusBar += statusStyle.Render("  a: spawn agent | t: attach to session | r: refresh | o: open in browser | esc: back")
 	} else {
 		statusBar += statusStyle.Render("  r: refresh | o: open in browser | q: quit")
 	}
@@ -130,6 +159,27 @@ func (m Model) View() tea.View {
 	return v
 }
 
+func (m Model) viewSessionPicker() tea.View {
+	var b strings.Builder
+	b.WriteString("\n  Select a session to attach to:\n\n")
+	for i, s := range m.sessions {
+		cursor := "  "
+		if i == m.sessionCursor {
+			cursor = "> "
+		}
+		label := s.ID
+		if s.Name != "" {
+			label = s.Name + " (" + s.ID + ")"
+		}
+		b.WriteString(fmt.Sprintf("  %s%s  [%s]  %s\n", cursor, label, s.Status, s.Agent))
+	}
+	b.WriteString("\n")
+	b.WriteString(statusStyle.Render("  enter: select | esc: cancel"))
+	v := tea.NewView(b.String())
+	v.AltScreen = true
+	return v
+}
+
 func (m Model) maxScroll() int {
 	max := len(m.renderedLines) - m.height + 2
 	if max < 0 {
@@ -139,6 +189,10 @@ func (m Model) maxScroll() int {
 }
 
 func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	if m.sessionPicker {
+		return m.handleSessionPickerKey(msg)
+	}
+
 	switch {
 	case msg.Code == tea.KeyDown:
 		if m.scroll < m.maxScroll() {
@@ -166,6 +220,11 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return m, func() tea.Msg { return SpawnSessionMsg{Ref: ref} }
 		}
 		return m, nil
+	case msg.Code == 't':
+		if m.embedded && m.conn != nil {
+			return m, fetchItemSessionsCmd(m.conn, m.ref)
+		}
+		return m, nil
 	case msg.Code == 'q' || msg.Code == tea.KeyEscape:
 		if m.embedded {
 			return m, func() tea.Msg { return CloseMsg{} }
@@ -173,6 +232,56 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 	}
 	return m, nil
+}
+
+func (m Model) handleSessionPickerKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	switch {
+	case msg.Code == tea.KeyDown || msg.Code == 'j':
+		if m.sessionCursor < len(m.sessions)-1 {
+			m.sessionCursor++
+		}
+		return m, nil
+	case msg.Code == tea.KeyUp || msg.Code == 'k':
+		if m.sessionCursor > 0 {
+			m.sessionCursor--
+		}
+		return m, nil
+	case msg.Code == tea.KeyEnter:
+		sess := m.sessions[m.sessionCursor]
+		m.sessionPicker = false
+		return m, func() tea.Msg {
+			return AttachSessionMsg{SessionID: sess.ID, Status: sess.Status}
+		}
+	case msg.Code == tea.KeyEscape:
+		m.sessionPicker = false
+		return m, nil
+	}
+	return m, nil
+}
+
+func fetchItemSessionsCmd(conn protocol.Conn, ref Ref) tea.Cmd {
+	return func() tea.Msg {
+		req, _ := protocol.NewRequest(protocol.MsgSessionList, "attach-sessions", nil)
+		if err := conn.Send(req); err != nil {
+			return statusTextMsg{text: "Failed to fetch sessions"}
+		}
+		resp, err := conn.Receive()
+		if err != nil {
+			return statusTextMsg{text: "Failed to fetch sessions"}
+		}
+		var payload protocol.SessionListPayload
+		if err := json.Unmarshal(resp.Payload, &payload); err != nil {
+			return statusTextMsg{text: "Failed to parse sessions"}
+		}
+		repo := ref.Owner + "/" + ref.Repo
+		var filtered []protocol.SessionPayload
+		for _, s := range payload.Sessions {
+			if s.Repo == repo && s.Number == ref.Number {
+				filtered = append(filtered, s)
+			}
+		}
+		return sessionsLoadedMsg{sessions: filtered}
+	}
 }
 
 func openBrowserCmd(url string) tea.Cmd {

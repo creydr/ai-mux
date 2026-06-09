@@ -78,16 +78,24 @@ func (m *Manager) CreateForPR(repoPath, name, repoFullName string, prNumber int)
 		ghCmd.Dir = wtPath
 		if out, err := ghCmd.CombinedOutput(); err != nil {
 			errStr := strings.TrimSpace(string(out))
-			if strings.Contains(errStr, "already used by worktree") || strings.Contains(errStr, "already exists") {
-				// Branch is checked out elsewhere — retry with a unique branch name
-				branchName := fmt.Sprintf("ai-mux/%s", candidate)
-				ghRetry := exec.Command("gh", "pr", "checkout", prNum, "--repo", repoFullName, "--branch", branchName)
+			if strings.Contains(errStr, "already used by worktree") || strings.Contains(errStr, "already exists") || strings.Contains(errStr, "refusing to fetch") {
+				// Branch is checked out elsewhere — retry in detached mode then create a local branch
+				ghRetry := exec.Command("gh", "pr", "checkout", prNum, "--repo", repoFullName, "--detach")
 				ghRetry.Dir = wtPath
 				if out2, err2 := ghRetry.CombinedOutput(); err2 != nil {
 					rmCmd := exec.Command("git", "worktree", "remove", "--force", wtPath)
 					rmCmd.Dir = repoPath
 					rmCmd.Run()
 					return "", fmt.Errorf("checking out PR #%s: %s: %w", prNum, strings.TrimSpace(string(out2)), err2)
+				}
+				branchName := fmt.Sprintf("ai-mux/%s", candidate)
+				branchCmd := exec.Command("git", "checkout", "-b", branchName)
+				branchCmd.Dir = wtPath
+				if out3, err3 := branchCmd.CombinedOutput(); err3 != nil {
+					rmCmd := exec.Command("git", "worktree", "remove", "--force", wtPath)
+					rmCmd.Dir = repoPath
+					rmCmd.Run()
+					return "", fmt.Errorf("creating branch %s: %s: %w", branchName, strings.TrimSpace(string(out3)), err3)
 				}
 				return wtPath, nil
 			}

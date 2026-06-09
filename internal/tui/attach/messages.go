@@ -1,6 +1,7 @@
 package attach
 
 import (
+	"github.com/creydr/ai-mux/internal/protocol"
 	"github.com/creydr/ai-mux/internal/provider"
 )
 
@@ -28,4 +29,17 @@ type CloseMsg struct{}
 
 type SpawnSessionMsg struct {
 	Ref Ref
+}
+
+type AttachSessionMsg struct {
+	SessionID string
+	Status    string
+}
+
+type sessionsLoadedMsg struct {
+	sessions []protocol.SessionPayload
+}
+
+type statusTextMsg struct {
+	text string
 }

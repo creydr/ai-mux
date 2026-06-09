@@ -75,7 +75,7 @@ func TestSessionCommand_SubcommandRegistration(t *testing.T) {
 		names[cmd.Name()] = true
 	}
 
-	for _, want := range []string{"list", "attach"} {
+	for _, want := range []string{"list", "attach", "rename"} {
 		if !names[want] {
 			t.Errorf("session missing subcommand %q", want)
 		}

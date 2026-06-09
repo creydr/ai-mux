@@ -31,9 +31,17 @@ var sessionAttachCmd = &cobra.Command{
 	RunE:  runSessionAttach,
 }
 
+var sessionRenameCmd = &cobra.Command{
+	Use:   "rename <session-id> <name>",
+	Short: "Rename a session",
+	Args:  cobra.ExactArgs(2),
+	RunE:  runSessionRename,
+}
+
 func init() {
 	sessionCmd.AddCommand(sessionListCmd)
 	sessionCmd.AddCommand(sessionAttachCmd)
+	sessionCmd.AddCommand(sessionRenameCmd)
 }
 
 func runSessionList(cmd *cobra.Command, args []string) error {
@@ -72,9 +80,13 @@ func runSessionList(cmd *cobra.Command, args []string) error {
 	}
 
 	w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 4, 2, ' ', 0)
-	fmt.Fprintln(w, "ID\tREPO\tNUMBER\tAGENT\tSTATUS\tCREATED")
+	fmt.Fprintln(w, "ID\tNAME\tREPO\tNUMBER\tAGENT\tSTATUS\tCREATED")
 	for _, s := range payload.Sessions {
-		fmt.Fprintf(w, "%s\t%s\t%d\t%s\t%s\t%s\n", s.ID, s.Repo, s.Number, s.Agent, s.Status, s.CreatedAt)
+		name := s.Name
+		if name == "" {
+			name = "-"
+		}
+		fmt.Fprintf(w, "%s\t%s\t%s\t%d\t%s\t%s\t%s\n", s.ID, name, s.Repo, s.Number, s.Agent, s.Status, s.CreatedAt)
 	}
 	w.Flush()
 	return nil
@@ -135,6 +147,45 @@ func tmuxAttach(sessionID string) error {
 		return fmt.Errorf("tmux not found: %w", err)
 	}
 	return syscall.Exec(tmuxPath, []string{"tmux", "attach-session", "-t", tmuxName}, os.Environ())
+}
+
+func runSessionRename(cmd *cobra.Command, args []string) error {
+	sessionID := args[0]
+	name := args[1]
+
+	cfg, err := loadConfig()
+	if err != nil {
+		return err
+	}
+
+	transport := jsonlines.NewTransport()
+	conn, err := transport.Dial(cfg.Daemon.Socket)
+	if err != nil {
+		return fmt.Errorf("connecting to daemon: %w (is the daemon running?)", err)
+	}
+	defer conn.Close()
+
+	req, _ := protocol.NewRequest(protocol.MsgSessionRename, "cli-rename", protocol.SessionRenamePayload{
+		SessionID: sessionID,
+		Name:      name,
+	})
+	if err := conn.Send(req); err != nil {
+		return fmt.Errorf("sending request: %w", err)
+	}
+	resp, err := conn.Receive()
+	if err != nil {
+		return fmt.Errorf("receiving response: %w", err)
+	}
+	if resp.Type == protocol.MsgError {
+		var errPayload map[string]string
+		if err := json.Unmarshal(resp.Payload, &errPayload); err != nil {
+			return fmt.Errorf("rename failed")
+		}
+		return fmt.Errorf("rename failed: %s", errPayload["error"])
+	}
+
+	fmt.Fprintf(cmd.OutOrStdout(), "session %s renamed to %q\n", sessionID, name)
+	return nil
 }
 
 func streamOutput(conn protocol.Conn, sessionID string) error {

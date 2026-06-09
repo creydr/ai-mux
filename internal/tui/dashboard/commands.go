@@ -232,6 +232,30 @@ func detachSessionCmd(conn protocol.Conn) tea.Cmd {
 	}
 }
 
+func renameSessionCmd(conn protocol.Conn, sessionID, name string) tea.Cmd {
+	return func() tea.Msg {
+		req, _ := protocol.NewRequest(protocol.MsgSessionRename, "dash-rename", protocol.SessionRenamePayload{
+			SessionID: sessionID,
+			Name:      name,
+		})
+		if err := conn.Send(req); err != nil {
+			return statusMsg{text: "Error: " + err.Error()}
+		}
+		resp, err := conn.Receive()
+		if err != nil {
+			return statusMsg{text: "Error: " + err.Error()}
+		}
+		if resp.Type == protocol.MsgError {
+			var errPayload map[string]string
+			if err := json.Unmarshal(resp.Payload, &errPayload); err != nil {
+				return statusMsg{text: "Rename failed"}
+			}
+			return statusMsg{text: "Error: " + errPayload["error"]}
+		}
+		return sessionRenamedMsg{sessionID: sessionID, name: name}
+	}
+}
+
 func listenAttachOutputCmd(conn protocol.Conn) tea.Cmd {
 	return func() tea.Msg {
 		msg, err := conn.Receive()
