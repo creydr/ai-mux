@@ -593,6 +593,36 @@ func (m *Model) handleEvent(ev event.Event) {
 		if ev.Item != nil {
 			m.updateItem(m.prs, *ev.Item)
 		}
+	case event.TypeSessionStatus:
+		if ev.Session != nil {
+			m.handleSessionEvent(*ev.Session)
+		}
+	}
+}
+
+func (m *Model) handleSessionEvent(sess protocol.SessionPayload) {
+	switch sess.Status {
+	case "completed", "failed", "stopped":
+		for i, s := range m.sessions {
+			if s.ID == sess.ID {
+				m.sessions = append(m.sessions[:i], m.sessions[i+1:]...)
+				if m.sessionCursor >= len(m.sessions) && m.sessionCursor > 0 {
+					m.sessionCursor--
+				}
+				break
+			}
+		}
+	default:
+		for i, s := range m.sessions {
+			if s.ID == sess.ID {
+				m.sessions[i] = sess
+				return
+			}
+		}
+		m.sessions = append(m.sessions, sess)
+	}
+	if m.activeTab != tabSessions {
+		m.sessionBadge++
 	}
 }
 

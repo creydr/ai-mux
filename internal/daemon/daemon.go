@@ -81,7 +81,7 @@ func New(cfg *config.Config, prov provider.Provider, st store.Store, transport p
 		sessMgr.Reconcile()
 	}
 
-	return &Daemon{
+	d := &Daemon{
 		config:     cfg,
 		provider:   prov,
 		store:      st,
@@ -90,7 +90,20 @@ func New(cfg *config.Config, prov provider.Provider, st store.Store, transport p
 		listener:   ln,
 		sessionMgr: sessMgr,
 		clients:    make(map[string]*clientConn),
-	}, nil
+	}
+
+	if sessMgr != nil {
+		sessMgr.SetOnStatus(func(sess *session.Session) {
+			p := sessionToPayload(sess)
+			d.bus.Publish(event.Event{
+				Type:      event.TypeSessionStatus,
+				Session:   &p,
+				Timestamp: time.Now(),
+			})
+		})
+	}
+
+	return d, nil
 }
 
 func (d *Daemon) Start(ctx context.Context) error {

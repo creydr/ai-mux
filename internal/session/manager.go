@@ -129,6 +129,10 @@ func (m *Manager) SetTmux(t TmuxExecutor) {
 	m.tmux = t
 }
 
+func (m *Manager) SetOnStatus(cb StatusCallback) {
+	m.onStatus = cb
+}
+
 func (m *Manager) SetWorktrees(w WorktreeCreator) {
 	m.worktrees = w
 }
