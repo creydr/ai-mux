@@ -176,7 +176,7 @@ func (m *Manager) Spawn(itemRepo string, itemNumber int, itemType string, agentN
 		CreatedAt:   time.Now(),
 	}
 
-	wtName := fmt.Sprintf("%s-%s-%d", itemType, agentName, itemNumber)
+	wtName := fmt.Sprintf("%s-%s-%d", itemType, sanitizeBranchName(agentName), itemNumber)
 	wtPath, err := m.resolveWorktree(repo.Path, wtName, itemRepo, itemNumber, itemType, wtAction)
 	if err != nil {
 		return nil, err
@@ -258,7 +258,7 @@ func (m *Manager) WorktreeExists(itemRepo string, itemNumber int, itemType strin
 	if !ok {
 		return false
 	}
-	wtName := fmt.Sprintf("%s-%s-%d", itemType, agentName, itemNumber)
+	wtName := fmt.Sprintf("%s-%s-%d", itemType, sanitizeBranchName(agentName), itemNumber)
 	return m.worktrees.Exists(repo.Path, wtName)
 }
 
@@ -606,6 +606,12 @@ func (m *Manager) sendFileOnce(ctx context.Context, path string, ch chan<- []byt
 	case ch <- data:
 	case <-ctx.Done():
 	}
+}
+
+var branchUnsafe = regexp.MustCompile(`[^a-zA-Z0-9._-]+`)
+
+func sanitizeBranchName(s string) string {
+	return strings.Trim(branchUnsafe.ReplaceAllString(s, "-"), "-")
 }
 
 var ansiRe = regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]|\x1b\][^\x07]*\x07|\x1b\[[\?]?[0-9;]*[a-zA-Z]`)

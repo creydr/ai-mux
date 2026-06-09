@@ -42,8 +42,9 @@ type DesktopNotifyConfig struct {
 }
 
 type AgentConfig struct {
-	Name    string `yaml:"name"`
-	Command string `yaml:"command"`
+	Name    string   `yaml:"name"`
+	Command string   `yaml:"command"`
+	Args    []string `yaml:"args,omitempty"`
 }
 
 type DaemonConfig struct {

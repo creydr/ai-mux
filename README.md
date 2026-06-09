@@ -35,6 +35,10 @@ github:
 agents:
   - name: claude
     command: claude
+  - name: claude YOLO
+    command: claude
+    args:
+      - "--dangerously-skip-permissions"
   - name: gemini
     command: gemini
 

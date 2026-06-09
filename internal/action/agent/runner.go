@@ -1,6 +1,8 @@
 package agent
 
 import (
+	"strings"
+
 	"github.com/creydr/ai-mux/internal/config"
 )
 
@@ -23,7 +25,10 @@ func (r *Runner) HasAgent(name string) bool {
 
 func (r *Runner) GetCommand(agentName string) string {
 	if a, ok := r.agents[agentName]; ok {
-		return a.Command
+		if len(a.Args) == 0 {
+			return a.Command
+		}
+		return a.Command + " " + strings.Join(a.Args, " ")
 	}
 	return agentName
 }

@@ -11,10 +11,15 @@ func testRunner() *Runner {
 		{
 			Name:    "claude",
 			Command: "claude",
+			Args:    []string{"--dangerously-skip-permissions"},
 		},
 		{
 			Name:    "gemini",
 			Command: "gemini-cli run",
+		},
+		{
+			Name:    "plain",
+			Command: "plain-agent",
 		},
 	})
 }
@@ -36,11 +41,14 @@ func TestRunner_HasAgent(t *testing.T) {
 func TestRunner_GetCommand(t *testing.T) {
 	r := testRunner()
 
-	if cmd := r.GetCommand("claude"); cmd != "claude" {
-		t.Errorf("expected claude, got %q", cmd)
+	if cmd := r.GetCommand("claude"); cmd != "claude --dangerously-skip-permissions" {
+		t.Errorf("expected claude with args, got %q", cmd)
 	}
 	if cmd := r.GetCommand("gemini"); cmd != "gemini-cli run" {
 		t.Errorf("expected gemini-cli run, got %q", cmd)
+	}
+	if cmd := r.GetCommand("plain"); cmd != "plain-agent" {
+		t.Errorf("expected plain-agent, got %q", cmd)
 	}
 	if cmd := r.GetCommand("unknown"); cmd != "unknown" {
 		t.Errorf("expected unknown as fallback, got %q", cmd)
