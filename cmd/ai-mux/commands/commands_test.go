@@ -59,13 +59,13 @@ func TestDaemonCommand_SubcommandRegistration(t *testing.T) {
 	}
 }
 
-func TestDaemonStartCommand_ForegroundFlag(t *testing.T) {
-	f := daemonStartCmd.Flags().Lookup("foreground")
+func TestDaemonStartCommand_BackgroundFlag(t *testing.T) {
+	f := daemonStartCmd.Flags().Lookup("background")
 	if f == nil {
-		t.Fatal("missing --foreground flag on daemon start")
+		t.Fatal("missing --background flag on daemon start")
 	}
 	if f.DefValue != "false" {
-		t.Errorf("--foreground default = %q, want %q", f.DefValue, "false")
+		t.Errorf("--background default = %q, want %q", f.DefValue, "false")
 	}
 }
 

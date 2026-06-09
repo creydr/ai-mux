@@ -58,11 +58,11 @@ ai-mux dashboard
 ### Daemon
 
 ```sh
-# Start the daemon (foreground)
-ai-mux daemon start --foreground
-
-# Start the daemon (runs in foreground, use & or tmux to background)
+# Start the daemon
 ai-mux daemon start
+
+# Start the daemon in the background
+ai-mux daemon start --background
 
 # Check daemon status
 ai-mux daemon status

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"syscall"
@@ -17,7 +18,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var foreground bool
+var background bool
 
 var daemonCmd = &cobra.Command{
 	Use:   "daemon",
@@ -43,7 +44,7 @@ var daemonStatusCmd = &cobra.Command{
 }
 
 func init() {
-	daemonStartCmd.Flags().BoolVar(&foreground, "foreground", false, "run in foreground (don't detach)")
+	daemonStartCmd.Flags().BoolVar(&background, "background", false, "detach and run in the background")
 	daemonCmd.AddCommand(daemonStartCmd)
 	daemonCmd.AddCommand(daemonStopCmd)
 	daemonCmd.AddCommand(daemonStatusCmd)
@@ -60,6 +61,10 @@ func stateFilePath() string {
 }
 
 func runDaemonStart(cmd *cobra.Command, args []string) error {
+	if background && os.Getenv("AI_MUX_DAEMON") == "" {
+		return startInBackground(cmd)
+	}
+
 	cfg, err := loadConfig()
 	if err != nil {
 		return err
@@ -105,6 +110,31 @@ func runDaemonStart(cmd *cobra.Command, args []string) error {
 	err = d.Start(ctx)
 	daemon.RemovePIDFile(pidPath)
 	return err
+}
+
+func startInBackground(cmd *cobra.Command) error {
+	exe, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("resolving executable: %w", err)
+	}
+
+	childArgs := []string{"daemon", "start"}
+	if cfgPath != "" {
+		childArgs = append(childArgs, "--config", cfgPath)
+	}
+
+	child := exec.Command(exe, childArgs...)
+	child.Env = append(os.Environ(), "AI_MUX_DAEMON=1")
+	child.Stdout = nil
+	child.Stderr = nil
+	child.Stdin = nil
+
+	if err := child.Start(); err != nil {
+		return fmt.Errorf("starting background daemon: %w", err)
+	}
+
+	fmt.Fprintf(cmd.OutOrStdout(), "daemon started in background (pid %d)\n", child.Process.Pid)
+	return nil
 }
 
 func runDaemonStop(cmd *cobra.Command, args []string) error {
