@@ -26,11 +26,6 @@ var (
 	normalItemStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#CCCCCC"))
 
-	repoHeaderStyle = lipgloss.NewStyle().
-			Bold(true).
-			Foreground(lipgloss.Color("#61AFEF")).
-			PaddingTop(1)
-
 	repoHeaderInlineStyle = lipgloss.NewStyle().
 				Bold(true).
 				Foreground(lipgloss.Color("#61AFEF"))

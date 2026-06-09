@@ -55,8 +55,7 @@ func (r *Runner) BuildCommand(agentName, actionType string, data TemplateData) (
 		return "", fmt.Errorf("executing args template: %w", err)
 	}
 
-	cmdParts := strings.Fields(agent.Command)
-	if len(cmdParts) == 0 {
+	if strings.TrimSpace(agent.Command) == "" {
 		return "", fmt.Errorf("agent %q has empty command", agentName)
 	}
 

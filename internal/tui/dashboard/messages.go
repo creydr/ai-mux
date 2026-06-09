@@ -48,8 +48,6 @@ type statusMsg struct {
 	text string
 }
 
-type statusClearMsg struct{}
-
 type statusTickMsg struct {
 	id  int
 	due time.Time

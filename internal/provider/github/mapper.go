@@ -2,7 +2,6 @@ package github
 
 import (
 	"fmt"
-	"time"
 
 	gh "github.com/google/go-github/v71/github"
 
@@ -49,7 +48,7 @@ func mapPR(repo provider.RepoRef, pr *gh.PullRequest) provider.Item {
 		Body:   pr.GetBody(),
 		State:  pr.GetState(),
 		URL:    pr.GetHTMLURL(),
-		Draft: pr.GetDraft(),
+		Draft:  pr.GetDraft(),
 	}
 
 	if pr.Head != nil {
@@ -112,8 +111,4 @@ func mapComment(comment *gh.IssueComment) provider.Comment {
 	}
 
 	return c
-}
-
-func timePtr(t time.Time) *gh.Timestamp {
-	return &gh.Timestamp{Time: t}
 }

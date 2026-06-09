@@ -726,16 +726,6 @@ func (m Model) statusBarText() string {
 	}
 }
 
-func (m Model) sessionForItem(repo string, number int) *protocol.SessionPayload {
-	for i := range m.sessions {
-		s := &m.sessions[i]
-		if s.Repo == repo && s.Number == number {
-			return s
-		}
-	}
-	return nil
-}
-
 func (m Model) handleAttachKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch {
 	case msg.Code == tea.KeyEscape:
