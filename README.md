@@ -63,10 +63,16 @@ github:
 agents:
   - name: claude
     command: claude
-    post_session: auto-pr
+    post_session: keep
     args_templates:
-      fix_issue: "--prompt 'Fix issue #{{.Item.Number}}: {{.Item.Title}}'"
-      review_pr: "--prompt 'Review PR #{{.Item.Number}}'"
+      fix_issue: "Fix {{.Item.URL}}"
+      review_pr: "Review {{.Item.URL}}"
+  - name: gemini
+    command: gemini
+    post_session: keep
+    args_templates:
+      fix_issue: "-i Fix {{.Item.URL}}"
+      review_pr: "-i Review {{.Item.URL}}"
 
 default_agent: claude
 ```
@@ -115,15 +121,16 @@ Keyboard shortcuts:
 - `Tab` — switch between Issues, PRs, and Sessions tabs
 - Arrow keys — navigate items
 - `Enter` — open item detail view
-- `o` — open item in browser
+- `a` — spawn agent session for selected item
+- `b` / `o` — open item in browser
 - `r` — refresh
 - `Ctrl-c` — quit
 
 **Item detail view:**
 - Arrow keys — scroll content
 - `a` — spawn agent session for this item
-- `r` — refresh
 - `o` — open in browser
+- `r` — refresh
 - `Esc` — back to list
 
 **Sessions tab:**
@@ -144,9 +151,10 @@ ai-mux attach pr/owner/repo/123
 
 Keyboard shortcuts:
 - Arrow keys — scroll
+- `a` — spawn agent session
 - `o` — open in browser
 - `r` — refresh
-- `q` — quit
+- `q` / `Esc` — quit
 
 ### ACP (IDE Integration)
 
@@ -202,6 +210,7 @@ echo '{"jsonrpc":"2.0","id":1,"method":"session/list","params":{}}' | ai-mux acp
 | `default_agent` | string | — | Default agent for actions |
 | `notifications.desktop.enabled` | bool | `false` | Enable desktop notifications |
 | `notifications.desktop.events` | list | all | Event types to notify on |
+| `dashboard.items_per_repo` | int | `3` | Items shown per repo before expanding |
 | `acp.socket` | string | `/tmp/ai-mux.sock` | Unix socket path |
 
 ### Agent Template Variables
@@ -213,7 +222,10 @@ Templates in `args_templates` have access to:
 | `{{.Item.Number}}` | Issue/PR number |
 | `{{.Item.Title}}` | Issue/PR title |
 | `{{.Item.Body}}` | Issue/PR description |
+| `{{.Item.URL}}` | GitHub URL |
 | `{{.Item.Author}}` | Author username |
+| `{{.Item.State}}` | State (open, closed, merged) |
+| `{{.Item.HeadBranch}}` | PR head branch (PRs only) |
 | `{{.Repo}}` | Repository name (owner/repo) |
 | `{{.RepoPath}}` | Local repository path |
 | `{{.Worktree}}` | Worktree path for this action |
@@ -267,7 +279,7 @@ internal/
   daemon/            Daemon core, client handling, PID management
   event/             Event types and channel-based event bus
   notifier/          Notification interface and implementations
-    desktop/         Desktop notifications (notify-send)
+    desktop/         Desktop notifications (notify-send on Linux, osascript on macOS)
     tui/             TUI badge counter
   poller/            GitHub polling orchestrator
   protocol/          Transport/connection interfaces and message types
