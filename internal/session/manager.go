@@ -13,6 +13,7 @@ import (
 
 	agentpkg "github.com/creydr/ai-mux/internal/action/agent"
 	"github.com/creydr/ai-mux/internal/config"
+	"github.com/creydr/ai-mux/internal/provider"
 	"github.com/creydr/ai-mux/internal/worktree"
 )
 
@@ -164,7 +165,7 @@ func (m *Manager) Spawn(itemRepo string, itemNumber int, itemType string, agentN
 	}
 
 	prefix := "fix"
-	if itemType == "pr" {
+	if itemType == string(provider.ItemTypePR) {
 		prefix = "rev"
 	}
 	id := generateID(prefix, itemNumber)
@@ -247,7 +248,7 @@ func (m *Manager) resolveWorktree(repoPath, wtName, itemRepo string, itemNumber 
 func (m *Manager) createWorktree(repoPath, name, itemRepo string, itemNumber int, itemType string) (string, error) {
 	var wtPath string
 	var err error
-	if itemType == "pr" {
+	if itemType == string(provider.ItemTypePR) {
 		wtPath, err = m.worktrees.CreateForPR(repoPath, name, itemRepo, itemNumber)
 	} else {
 		wtPath, err = m.worktrees.Create(repoPath, name)

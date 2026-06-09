@@ -221,11 +221,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.rebuildViewport()
 			return m, m.scheduleStatusClear()
 		}
-		itemType := "issue"
-		if msg.Ref.Type == provider.ItemTypePR {
-			itemType = "pr"
-		}
-		req := &spawnRequest{repo: msg.Ref.Owner + "/" + msg.Ref.Repo, number: msg.Ref.Number, itemType: itemType}
+		req := &spawnRequest{repo: msg.Ref.Owner + "/" + msg.Ref.Repo, number: msg.Ref.Number, itemType: string(msg.Ref.Type)}
 		if m.defaultAgent != "" {
 			m.view = viewOverview
 			m.itemDetail = nil
@@ -532,9 +528,9 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if item == nil {
 			return m, nil
 		}
-		itemType := "issue"
+		itemType := string(provider.ItemTypeIssue)
 		if m.activeTab == tabPRs {
-			itemType = "pr"
+			itemType = string(provider.ItemTypePR)
 		}
 		req := &spawnRequest{repo: item.Repo.String(), number: item.Number, itemType: itemType}
 		if m.defaultAgent != "" {
