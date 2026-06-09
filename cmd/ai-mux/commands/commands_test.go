@@ -52,7 +52,7 @@ func TestDaemonCommand_SubcommandRegistration(t *testing.T) {
 		names[cmd.Name()] = true
 	}
 
-	for _, want := range []string{"start", "stop", "status"} {
+	for _, want := range []string{"start", "stop", "status", "install", "uninstall"} {
 		if !names[want] {
 			t.Errorf("daemon missing subcommand %q", want)
 		}
@@ -90,6 +90,75 @@ func TestSessionAttachCommand_RequiresExactlyOneArg(t *testing.T) {
 	err := rootCmd.Execute()
 	if err == nil {
 		t.Error("session attach with no args should fail")
+	}
+}
+
+func TestSystemdTemplate(t *testing.T) {
+	var buf bytes.Buffer
+	err := systemdTemplate.Execute(&buf, serviceParams{
+		ExePath:    "/usr/local/bin/ai-mux",
+		ConfigPath: "/home/user/.config/ai-mux/config.yaml",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := buf.String()
+	if !strings.Contains(got, "ExecStart=/usr/local/bin/ai-mux daemon start --config /home/user/.config/ai-mux/config.yaml") {
+		t.Errorf("systemd unit missing expected ExecStart, got:\n%s", got)
+	}
+	if !strings.Contains(got, "Restart=on-failure") {
+		t.Errorf("systemd unit missing Restart directive")
+	}
+}
+
+func TestSystemdTemplate_NoConfig(t *testing.T) {
+	var buf bytes.Buffer
+	err := systemdTemplate.Execute(&buf, serviceParams{
+		ExePath: "/usr/local/bin/ai-mux",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := buf.String()
+	if !strings.Contains(got, "ExecStart=/usr/local/bin/ai-mux daemon start\n") {
+		t.Errorf("systemd unit should not include --config when empty, got:\n%s", got)
+	}
+}
+
+func TestLaunchdTemplate(t *testing.T) {
+	var buf bytes.Buffer
+	err := launchdTemplate.Execute(&buf, serviceParams{
+		ExePath:    "/usr/local/bin/ai-mux",
+		ConfigPath: "/Users/test/.config/ai-mux/config.yaml",
+		LogPath:    "/Users/test/Library/Logs/ai-mux.log",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := buf.String()
+	if !strings.Contains(got, "<string>/usr/local/bin/ai-mux</string>") {
+		t.Errorf("plist missing executable path")
+	}
+	if !strings.Contains(got, "<string>--config</string>") {
+		t.Errorf("plist missing --config argument")
+	}
+	if !strings.Contains(got, "KeepAlive") {
+		t.Errorf("plist missing KeepAlive")
+	}
+}
+
+func TestLaunchdTemplate_NoConfig(t *testing.T) {
+	var buf bytes.Buffer
+	err := launchdTemplate.Execute(&buf, serviceParams{
+		ExePath: "/usr/local/bin/ai-mux",
+		LogPath: "/Users/test/Library/Logs/ai-mux.log",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := buf.String()
+	if strings.Contains(got, "--config") {
+		t.Errorf("plist should not include --config when empty, got:\n%s", got)
 	}
 }
 

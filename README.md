@@ -69,6 +69,12 @@ ai-mux daemon status
 
 # Stop the daemon
 ai-mux daemon stop
+
+# Install as a system service (systemd on Linux, launchd on macOS)
+ai-mux daemon install
+
+# Remove the system service
+ai-mux daemon uninstall
 ```
 
 Sessions are persisted to `~/.ai-mux/sessions.json` and survive daemon restarts. On startup, the daemon reconciles persisted sessions with live tmux state.

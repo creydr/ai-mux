@@ -8,7 +8,9 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"syscall"
+	"text/template"
 
 	"github.com/creydr/ai-mux/internal/daemon"
 	"github.com/creydr/ai-mux/internal/protocol"
@@ -43,11 +45,25 @@ var daemonStatusCmd = &cobra.Command{
 	RunE:  runDaemonStatus,
 }
 
+var daemonInstallCmd = &cobra.Command{
+	Use:   "install",
+	Short: "Install the daemon as a system service",
+	RunE:  runDaemonInstall,
+}
+
+var daemonUninstallCmd = &cobra.Command{
+	Use:   "uninstall",
+	Short: "Remove the daemon system service",
+	RunE:  runDaemonUninstall,
+}
+
 func init() {
 	daemonStartCmd.Flags().BoolVar(&background, "background", false, "detach and run in the background")
 	daemonCmd.AddCommand(daemonStartCmd)
 	daemonCmd.AddCommand(daemonStopCmd)
 	daemonCmd.AddCommand(daemonStatusCmd)
+	daemonCmd.AddCommand(daemonInstallCmd)
+	daemonCmd.AddCommand(daemonUninstallCmd)
 }
 
 func pidFilePath() string {
@@ -203,5 +219,146 @@ func runDaemonStatus(cmd *cobra.Command, args []string) error {
 	fmt.Fprintf(cmd.OutOrStdout(), "  uptime:  %s\n", status.Uptime)
 	fmt.Fprintf(cmd.OutOrStdout(), "  repos:   %v\n", status.Repos)
 	fmt.Fprintf(cmd.OutOrStdout(), "  clients: %d\n", status.Clients)
+	return nil
+}
+
+type serviceParams struct {
+	ExePath    string
+	ConfigPath string
+	LogPath    string
+}
+
+var systemdTemplate = template.Must(template.New("systemd").Parse(`[Unit]
+Description=ai-mux daemon
+After=network.target
+
+[Service]
+Type=simple
+ExecStart={{.ExePath}} daemon start{{if .ConfigPath}} --config {{.ConfigPath}}{{end}}
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target
+`))
+
+var launchdTemplate = template.Must(template.New("launchd").Parse(`<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>com.ai-mux.daemon</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>{{.ExePath}}</string>
+		<string>daemon</string>
+		<string>start</string>{{if .ConfigPath}}
+		<string>--config</string>
+		<string>{{.ConfigPath}}</string>{{end}}
+	</array>
+	<key>RunAtLoad</key>
+	<true/>
+	<key>KeepAlive</key>
+	<true/>
+	<key>StandardOutPath</key>
+	<string>{{.LogPath}}</string>
+	<key>StandardErrorPath</key>
+	<string>{{.LogPath}}</string>
+</dict>
+</plist>
+`))
+
+func serviceFilePath() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("resolving home directory: %w", err)
+	}
+	switch runtime.GOOS {
+	case "linux":
+		return filepath.Join(home, ".config", "systemd", "user", "ai-mux.service"), nil
+	case "darwin":
+		return filepath.Join(home, "Library", "LaunchAgents", "com.ai-mux.daemon.plist"), nil
+	default:
+		return "", fmt.Errorf("unsupported platform: %s", runtime.GOOS)
+	}
+}
+
+func runDaemonInstall(cmd *cobra.Command, args []string) error {
+	exe, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("resolving executable: %w", err)
+	}
+
+	cfgArg := cfgPath
+
+	svcPath, err := serviceFilePath()
+	if err != nil {
+		return err
+	}
+
+	if err := os.MkdirAll(filepath.Dir(svcPath), 0o755); err != nil {
+		return fmt.Errorf("creating directory: %w", err)
+	}
+
+	f, err := os.Create(svcPath)
+	if err != nil {
+		return fmt.Errorf("creating service file: %w", err)
+	}
+	defer f.Close()
+
+	params := serviceParams{
+		ExePath:    exe,
+		ConfigPath: cfgArg,
+	}
+
+	switch runtime.GOOS {
+	case "linux":
+		if err := systemdTemplate.Execute(f, params); err != nil {
+			return fmt.Errorf("writing service file: %w", err)
+		}
+		fmt.Fprintf(cmd.OutOrStdout(), "wrote systemd unit to %s\n\n", svcPath)
+		fmt.Fprintln(cmd.OutOrStdout(), "to enable and start:")
+		fmt.Fprintln(cmd.OutOrStdout(), "  systemctl --user daemon-reload")
+		fmt.Fprintln(cmd.OutOrStdout(), "  systemctl --user enable --now ai-mux")
+	case "darwin":
+		home, _ := os.UserHomeDir()
+		params.LogPath = filepath.Join(home, "Library", "Logs", "ai-mux.log")
+		if err := launchdTemplate.Execute(f, params); err != nil {
+			return fmt.Errorf("writing plist: %w", err)
+		}
+		fmt.Fprintf(cmd.OutOrStdout(), "wrote launchd plist to %s\n\n", svcPath)
+		fmt.Fprintln(cmd.OutOrStdout(), "to load:")
+		fmt.Fprintf(cmd.OutOrStdout(), "  launchctl load %s\n", svcPath)
+	}
+
+	return nil
+}
+
+func runDaemonUninstall(cmd *cobra.Command, args []string) error {
+	svcPath, err := serviceFilePath()
+	if err != nil {
+		return err
+	}
+
+	if _, err := os.Stat(svcPath); os.IsNotExist(err) {
+		return fmt.Errorf("service file not found at %s", svcPath)
+	}
+
+	if err := os.Remove(svcPath); err != nil {
+		return fmt.Errorf("removing service file: %w", err)
+	}
+
+	switch runtime.GOOS {
+	case "linux":
+		fmt.Fprintf(cmd.OutOrStdout(), "removed %s\n\n", svcPath)
+		fmt.Fprintln(cmd.OutOrStdout(), "to stop and disable:")
+		fmt.Fprintln(cmd.OutOrStdout(), "  systemctl --user disable --now ai-mux")
+		fmt.Fprintln(cmd.OutOrStdout(), "  systemctl --user daemon-reload")
+	case "darwin":
+		fmt.Fprintf(cmd.OutOrStdout(), "removed %s\n\n", svcPath)
+		fmt.Fprintln(cmd.OutOrStdout(), "to unload (if currently running):")
+		fmt.Fprintf(cmd.OutOrStdout(), "  launchctl unload %s\n", svcPath)
+	}
+
 	return nil
 }
