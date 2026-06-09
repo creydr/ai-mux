@@ -12,11 +12,11 @@ import (
 
 type Config struct {
 	Repos         []RepoConfig    `yaml:"repos"`
-	PollInterval  Duration        `yaml:"poll_interval"`
+	PollInterval  Duration        `yaml:"pollInterval"`
 	GitHub        GitHubConfig    `yaml:"github"`
 	Notifications NotifyConfig    `yaml:"notifications"`
 	Agents        []AgentConfig   `yaml:"agents"`
-	DefaultAgent  string          `yaml:"default_agent"`
+	DefaultAgent  string          `yaml:"defaultAgent"`
 	Daemon        DaemonConfig    `yaml:"daemon"`
 	Dashboard     DashboardConfig `yaml:"dashboard"`
 }
@@ -27,9 +27,9 @@ type RepoConfig struct {
 }
 
 type GitHubConfig struct {
-	TokenFrom string `yaml:"token_from"`
+	TokenFrom string `yaml:"tokenFrom"`
 	Token     string `yaml:"token"`
-	TokenEnv  string `yaml:"token_env"`
+	TokenEnv  string `yaml:"tokenEnv"`
 }
 
 type NotifyConfig struct {
@@ -52,7 +52,7 @@ type DaemonConfig struct {
 }
 
 type DashboardConfig struct {
-	ItemsPerRepo int `yaml:"items_per_repo"`
+	ItemsPerRepo int `yaml:"itemsPerRepo"`
 }
 
 type Duration struct {
@@ -130,7 +130,7 @@ func (c *Config) Validate() error {
 	}
 
 	if c.PollInterval.Duration <= 0 {
-		return fmt.Errorf("poll_interval must be positive")
+		return fmt.Errorf("pollInterval must be positive")
 	}
 
 	for i, agent := range c.Agents {
@@ -151,7 +151,7 @@ func (c *Config) Validate() error {
 			}
 		}
 		if !found {
-			return fmt.Errorf("default_agent %q not found in agents list", c.DefaultAgent)
+			return fmt.Errorf("defaultAgent %q not found in agents list", c.DefaultAgent)
 		}
 	}
 

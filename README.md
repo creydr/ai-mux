@@ -27,10 +27,10 @@ repos:
   - name: owner/repo-b
     path: ~/development/repo-b
 
-poll_interval: 30s
+pollInterval: 30s
 
 github:
-  token_from: gh
+  tokenFrom: gh
 
 agents:
   - name: claude
@@ -42,7 +42,7 @@ agents:
   - name: gemini
     command: gemini
 
-default_agent: claude
+defaultAgent: claude
 ```
 
 2. Start the daemon:
@@ -149,17 +149,18 @@ For running/pending sessions, `attach` opens the tmux session directly. For comp
 | `repos` | list | required | Repositories to watch |
 | `repos[].name` | string | required | Repository in `owner/repo` format |
 | `repos[].path` | string | required | Local clone path (supports `~`) |
-| `poll_interval` | duration | `30s` | How often to poll GitHub |
-| `github.token_from` | string | `gh` | Token source: `gh` (GitHub CLI) |
+| `pollInterval` | duration | `30s` | How often to poll GitHub |
+| `github.tokenFrom` | string | `gh` | Token source: `gh` (GitHub CLI) |
 | `github.token` | string | — | Direct token (not recommended) |
-| `github.token_env` | string | — | Environment variable with token |
+| `github.tokenEnv` | string | — | Environment variable with token |
 | `agents` | list | — | AI agent configurations |
 | `agents[].name` | string | required | Agent identifier |
 | `agents[].command` | string | required | Command to run the agent |
-| `default_agent` | string | — | Default agent for actions |
+| `agents[].args` | list | — | Extra arguments passed to the command |
+| `defaultAgent` | string | — | Default agent for actions |
 | `notifications.desktop.enabled` | bool | `false` | Enable desktop notifications |
 | `notifications.desktop.events` | list | all | Event types to notify on |
-| `dashboard.items_per_repo` | int | `3` | Items shown per repo before expanding |
+| `dashboard.itemsPerRepo` | int | `3` | Items shown per repo before expanding |
 | `daemon.socket` | string | `/tmp/ai-mux.sock` | Unix socket path |
 
 ### Worktree Isolation

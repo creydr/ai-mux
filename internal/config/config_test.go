@@ -15,16 +15,16 @@ repos:
   - name: org/repo-b
     path: /tmp/repo-b
 
-poll_interval: 30s
+pollInterval: 30s
 
 github:
-  token_from: gh
+  tokenFrom: gh
 
 agents:
   - name: claude
     command: claude
 
-default_agent: claude
+defaultAgent: claude
 
 notifications:
   desktop:
@@ -51,13 +51,13 @@ notifications:
 		t.Errorf("expected 30s poll interval, got %s", cfg.PollInterval.Duration)
 	}
 	if cfg.GitHub.TokenFrom != "gh" {
-		t.Errorf("expected token_from gh, got %s", cfg.GitHub.TokenFrom)
+		t.Errorf("expected tokenFrom gh, got %s", cfg.GitHub.TokenFrom)
 	}
 	if len(cfg.Agents) != 1 {
 		t.Fatalf("expected 1 agent, got %d", len(cfg.Agents))
 	}
 	if cfg.DefaultAgent != "claude" {
-		t.Errorf("expected default_agent claude, got %s", cfg.DefaultAgent)
+		t.Errorf("expected defaultAgent claude, got %s", cfg.DefaultAgent)
 	}
 	if !cfg.Notifications.Desktop.Enabled {
 		t.Error("expected desktop notifications enabled")
@@ -92,7 +92,7 @@ func TestLoad_PollIntervalParsing(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
-			content := "repos:\n  - name: o/r\n    path: /tmp/r\npoll_interval: " + tt.input
+			content := "repos:\n  - name: o/r\n    path: /tmp/r\npollInterval: " + tt.input
 			path := writeTemp(t, content)
 			cfg, err := Load(path)
 			if err != nil {
@@ -111,7 +111,7 @@ func TestLoad_HomeExpansion(t *testing.T) {
 		t.Skip("cannot determine home dir")
 	}
 
-	content := "repos:\n  - name: o/r\n    path: ~/projects/myrepo\npoll_interval: 30s"
+	content := "repos:\n  - name: o/r\n    path: ~/projects/myrepo\npollInterval: 30s"
 	path := writeTemp(t, content)
 	cfg, err := Load(path)
 	if err != nil {
@@ -165,7 +165,7 @@ func TestValidate_DefaultAgentNotFound(t *testing.T) {
 	cfg.DefaultAgent = "nonexistent"
 	err := cfg.Validate()
 	if err == nil {
-		t.Fatal("expected error for unknown default_agent")
+		t.Fatal("expected error for unknown defaultAgent")
 	}
 }
 
@@ -186,25 +186,25 @@ func TestDefault(t *testing.T) {
 		t.Errorf("expected 30s default poll interval, got %s", cfg.PollInterval.Duration)
 	}
 	if cfg.GitHub.TokenFrom != "gh" {
-		t.Errorf("expected default token_from gh, got %s", cfg.GitHub.TokenFrom)
+		t.Errorf("expected default tokenFrom gh, got %s", cfg.GitHub.TokenFrom)
 	}
 	if cfg.Daemon.Socket != "/tmp/ai-mux.sock" {
 		t.Errorf("expected default socket /tmp/ai-mux.sock, got %s", cfg.Daemon.Socket)
 	}
 	if cfg.Dashboard.ItemsPerRepo != 3 {
-		t.Errorf("expected default items_per_repo 3, got %d", cfg.Dashboard.ItemsPerRepo)
+		t.Errorf("expected default itemsPerRepo 3, got %d", cfg.Dashboard.ItemsPerRepo)
 	}
 }
 
 func TestLoad_DashboardConfig(t *testing.T) {
-	content := "repos:\n  - name: o/r\n    path: /tmp/r\npoll_interval: 30s\ndashboard:\n  items_per_repo: 5"
+	content := "repos:\n  - name: o/r\n    path: /tmp/r\npollInterval: 30s\ndashboard:\n  itemsPerRepo: 5"
 	path := writeTemp(t, content)
 	cfg, err := Load(path)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if cfg.Dashboard.ItemsPerRepo != 5 {
-		t.Errorf("expected items_per_repo 5, got %d", cfg.Dashboard.ItemsPerRepo)
+		t.Errorf("expected itemsPerRepo 5, got %d", cfg.Dashboard.ItemsPerRepo)
 	}
 }
 
