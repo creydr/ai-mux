@@ -79,3 +79,7 @@ type sessionRenamedMsg struct {
 	sessionID string
 	name      string
 }
+
+type sessionTickMsg struct {
+	id int
+}

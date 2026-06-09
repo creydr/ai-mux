@@ -90,7 +90,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if len(msg.sessions) == 1 {
 			return m, func() tea.Msg {
-				return AttachSessionMsg{SessionID: msg.sessions[0].ID, Status: msg.sessions[0].Status}
+				return AttachSessionMsg{SessionID: msg.sessions[0].ID, Name: msg.sessions[0].Name, Status: msg.sessions[0].Status}
 			}
 		}
 		m.sessions = msg.sessions
@@ -250,7 +250,7 @@ func (m Model) handleSessionPickerKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) 
 		sess := m.sessions[m.sessionCursor]
 		m.sessionPicker = false
 		return m, func() tea.Msg {
-			return AttachSessionMsg{SessionID: sess.ID, Status: sess.Status}
+			return AttachSessionMsg{SessionID: sess.ID, Name: sess.Name, Status: sess.Status}
 		}
 	case msg.Code == tea.KeyEscape:
 		m.sessionPicker = false

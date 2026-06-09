@@ -125,9 +125,32 @@ func sessionBadge(status string, waitingInput bool) string {
 	}
 }
 
-func buildSessionLines(sessions []protocol.SessionPayload, cursor, width int) ([]string, int) {
+func buildSessionLines(sessions []protocol.SessionPayload, cursor, width, scrollOffset int) ([]string, int) {
 	if len(sessions) == 0 {
 		return []string{statusBarStyle.Render("  No sessions")}, 0
+	}
+
+	const agentCol = 10
+	const elapsedCol = 12
+
+	itemCol := 0
+	for _, s := range sessions {
+		if s.Repo != "" && s.Number > 0 {
+			l := len(fmt.Sprintf("%s#%d", s.Repo, s.Number))
+			if l > itemCol {
+				itemCol = l
+			}
+		}
+	}
+	if itemCol < 10 {
+		itemCol = 10
+	}
+
+	// "  " + label + "  " + item + "  " + agent + "  " + badge(~10) + "  " + elapsed
+	fixedCols := 2 + 2 + itemCol + 2 + agentCol + 2 + 10 + 2 + elapsedCol
+	labelWidth := width - fixedCols
+	if labelWidth < 16 {
+		labelWidth = 16
 	}
 
 	var lines []string
@@ -139,16 +162,30 @@ func buildSessionLines(sessions []protocol.SessionPayload, cursor, width int) ([
 		if t, err := time.Parse(time.RFC3339, s.CreatedAt); err == nil {
 			elapsed = time.Since(t).Truncate(time.Second).String()
 		}
+		if len(elapsed) > elapsedCol {
+			elapsed = elapsed[:elapsedCol]
+		}
 
 		item := ""
 		if s.Repo != "" && s.Number > 0 {
 			item = fmt.Sprintf("%s#%d", s.Repo, s.Number)
 		}
+
+		agent := s.Agent
+		if len(agent) > agentCol {
+			agent = agent[:agentCol-1] + "…"
+		}
+
 		label := s.ID
 		if s.Name != "" {
-			label = fmt.Sprintf("%s (%s)", s.Name, s.ID)
+			label = s.Name
 		}
-		text := fmt.Sprintf("  %-24s  %-30s  %-10s %s  %s", label, item, s.Agent, badge, elapsed)
+		if i == cursor {
+			label = scrollLabel(label, labelWidth, scrollOffset)
+		} else if len(label) > labelWidth {
+			label = label[:labelWidth-1] + "…"
+		}
+		text := fmt.Sprintf("  %-*s  %-*s  %-*s %s  %-*s", labelWidth, label, itemCol, item, agentCol, agent, badge, elapsedCol, elapsed)
 		if i == cursor {
 			cursorLine = len(lines)
 			lines = append(lines, selectedItemStyle.Width(width).Render(text))
@@ -158,6 +195,26 @@ func buildSessionLines(sessions []protocol.SessionPayload, cursor, width int) ([
 	}
 
 	return lines, cursorLine
+}
+
+func scrollLabel(name string, maxWidth, offset int) string {
+	if len(name) <= maxWidth {
+		return name
+	}
+	maxScroll := len(name) - maxWidth
+	pause := 1
+	cycle := pause + maxScroll + pause
+	pos := offset % cycle
+	var scrollPos int
+	switch {
+	case pos < pause:
+		scrollPos = 0
+	case pos < pause+maxScroll:
+		scrollPos = pos - pause
+	default:
+		scrollPos = maxScroll
+	}
+	return name[scrollPos : scrollPos+maxWidth]
 }
 
 func formatItem(item provider.Item, width int) string {

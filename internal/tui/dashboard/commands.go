@@ -3,6 +3,7 @@ package dashboard
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"os/exec"
 
 	tea "charm.land/bubbletea/v2"
@@ -215,10 +216,20 @@ func attachSessionCmd(conn protocol.Conn, sessionID string) tea.Cmd {
 	}
 }
 
-func tmuxAttachCmd(sessionID string) tea.Cmd {
+func tmuxAttachCmd(sessionID, sessionName string) tea.Cmd {
 	tmuxName := "ai-mux-" + sessionID
-	c := exec.Command("sh", "-c",
-		fmt.Sprintf(`tmux set-option -t %q status-right " ctrl-b d: detach " 2>/dev/null; tmux attach-session -t %q`, tmuxName, tmuxName))
+	exe, _ := os.Executable()
+
+	exec.Command("tmux", "set-option", "-t", tmuxName, "status-right",
+		" ctrl-b d: detach | ctrl-b n: rename ").Run()
+
+	renameTemplate := fmt.Sprintf(
+		`run-shell '%s session rename %s "%%%%" >/dev/null 2>&1 && tmux display-message "Session renamed" || tmux display-message "Rename failed"'`,
+		exe, sessionID)
+	exec.Command("tmux", "bind-key", "-T", "prefix", "n",
+		"command-prompt", "-I", sessionName, "-p", "Session name:", renameTemplate).Run()
+
+	c := exec.Command("tmux", "attach-session", "-t", tmuxName)
 	return tea.ExecProcess(c, func(err error) tea.Msg {
 		return tmuxDetachedMsg{err: err}
 	})

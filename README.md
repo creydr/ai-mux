@@ -111,6 +111,15 @@ Keyboard shortcuts:
 - `s` — stop selected session
 - `Ctrl-c` — quit
 
+**Attached session view:**
+- `n` — rename session (pre-filled with current name)
+- `PgUp` / `PgDn` — scroll output
+- `Esc` — back
+
+**tmux session:**
+- `ctrl-b d` — detach
+- `ctrl-b n` — rename session
+
 ### Session
 
 ```sh

@@ -90,6 +90,9 @@ type Model struct {
 	renameActive    bool
 	renameInput     string
 	renamingSession string
+
+	sessionTickID    int
+	sessionScrollPos int
 }
 
 func New(conn protocol.Conn, itemsPerRepo int, agents []string, defaultAgent string) Model {
@@ -186,12 +189,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case sessionSpawnedMsg:
 		m.sessions = append(m.sessions, msg.session)
-		return m, tmuxAttachCmd(msg.session.ID)
+		return m, tmuxAttachCmd(msg.session.ID, msg.session.Name)
 	case tmuxDetachedMsg:
 		m.view = viewOverview
 		m.rebuildViewport()
 		if m.conn != nil {
-			return m, fetchSessionsCmd(m.conn)
+			cmds := []tea.Cmd{fetchSessionsCmd(m.conn)}
+			if m.activeTab == tabSessions {
+				cmds = append(cmds, m.startSessionTick())
+			}
+			return m, tea.Batch(cmds...)
 		}
 		return m, nil
 	case sessionRenamedMsg:
@@ -200,6 +207,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.sessions[i].Name = msg.name
 				break
 			}
+		}
+		if m.attachedSession != nil && m.attachedSession.ID == msg.sessionID {
+			m.attachedSession.Name = msg.name
 		}
 		m.statusText = "Session renamed"
 		m.rebuildViewport()
@@ -217,6 +227,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case statusMsg:
 		m.statusText = msg.text
 		return m, m.scheduleStatusClear()
+	case sessionTickMsg:
+		if msg.id != m.sessionTickID {
+			return m, nil
+		}
+		if m.activeTab == tabSessions && m.view == viewOverview {
+			m.sessionScrollPos++
+			m.rebuildViewport()
+			return m, m.startSessionTick()
+		}
+		return m, nil
 	case statusTickMsg:
 		if msg.id == m.statusTickID && time.Now().After(msg.due) {
 			m.statusText = ""
@@ -232,9 +252,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.itemDetail = nil
 		m.rebuildViewport()
 		if msg.Status == "running" || msg.Status == "pending" {
-			return m, tmuxAttachCmd(msg.SessionID)
+			return m, tmuxAttachCmd(msg.SessionID, msg.Name)
 		}
-		m.attachedSession = &protocol.SessionPayload{ID: msg.SessionID, Status: msg.Status}
+		m.attachedSession = &protocol.SessionPayload{ID: msg.SessionID, Name: msg.Name, Status: msg.Status}
 		if m.conn != nil {
 			return m, attachSessionCmd(m.conn, msg.SessionID)
 		}
@@ -378,7 +398,7 @@ func (m *Model) rebuildViewport() {
 	if m.activeTab == tabSessions {
 		m.viewport.SetWidth(width)
 		m.viewport.SetHeight(vpHeight)
-		lines, cursorLine := buildSessionLines(m.sessions, m.sessionCursor, width)
+		lines, cursorLine := buildSessionLines(m.sessions, m.sessionCursor, width, m.sessionScrollPos)
 		m.viewport.SetContentLines(lines)
 		m.cursorLine = cursorLine
 	} else {
@@ -444,9 +464,10 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.prBadge = 0
 		case tabSessions:
 			m.sessionBadge = 0
+			m.sessionScrollPos = 0
 			if m.conn != nil {
 				m.rebuildViewport()
-				return m, fetchSessionsCmd(m.conn)
+				return m, tea.Batch(fetchSessionsCmd(m.conn), m.startSessionTick())
 			}
 		}
 		m.rebuildViewport()
@@ -455,6 +476,7 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if m.activeTab == tabSessions {
 			if m.sessionCursor < len(m.sessions)-1 {
 				m.sessionCursor++
+				m.sessionScrollPos = 0
 			}
 			m.rebuildViewport()
 		} else if m.focusPanel == panelRepos {
@@ -474,6 +496,7 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if m.activeTab == tabSessions {
 			if m.sessionCursor > 0 {
 				m.sessionCursor--
+				m.sessionScrollPos = 0
 			}
 			m.rebuildViewport()
 		} else if m.focusPanel == panelRepos {
@@ -492,7 +515,7 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			if m.sessionCursor >= 0 && m.sessionCursor < len(m.sessions) {
 				sess := m.sessions[m.sessionCursor]
 				if sess.Status == "running" || sess.Status == "pending" {
-					return m, tmuxAttachCmd(sess.ID)
+					return m, tmuxAttachCmd(sess.ID, sess.Name)
 				}
 				m.attachedSession = &sess
 				if m.conn != nil {
@@ -778,6 +801,14 @@ func (m Model) updateItem(items []provider.Item, updated provider.Item) {
 	}
 }
 
+func (m *Model) startSessionTick() tea.Cmd {
+	m.sessionTickID++
+	id := m.sessionTickID
+	return tea.Tick(500*time.Millisecond, func(t time.Time) tea.Msg {
+		return sessionTickMsg{id: id}
+	})
+}
+
 func (m *Model) scheduleStatusClear() tea.Cmd {
 	m.statusTickID++
 	id := m.statusTickID
@@ -846,6 +877,14 @@ func (m Model) handleAttachKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case msg.Code == tea.KeyPgDown:
 		m.attachViewport.SetYOffset(m.attachViewport.YOffset() + 10)
 		return m, nil
+	case msg.Code == 'n':
+		if m.attachedSession != nil {
+			m.renameActive = true
+			m.renamingSession = m.attachedSession.ID
+			m.renameInput = m.attachedSession.Name
+			return m, nil
+		}
+		return m, nil
 	}
 	return m, nil
 }
@@ -879,8 +918,11 @@ func (m Model) renderAttachView() tea.View {
 	b.WriteString(attachSeparatorStyle.Render(strings.Repeat("─", width)))
 	b.WriteString("\n")
 
-	helpText := "esc: back | pgup/pgdn: scroll"
-	b.WriteString(statusBarStyle.Render("  " + helpText))
+	if m.renameActive {
+		b.WriteString(statusBarStyle.Render(fmt.Sprintf("  Rename: %s█  (enter: confirm | esc: cancel)", m.renameInput)))
+	} else {
+		b.WriteString(statusBarStyle.Render("  esc: back | n: rename | pgup/pgdn: scroll"))
+	}
 
 	v := tea.NewView(b.String())
 	v.AltScreen = true

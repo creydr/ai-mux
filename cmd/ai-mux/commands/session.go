@@ -134,18 +134,26 @@ func runSessionAttach(cmd *cobra.Command, args []string) error {
 
 	switch found.Status {
 	case "running", "pending":
-		return tmuxAttach(sessionID)
+		return tmuxAttach(sessionID, found.Name)
 	default:
 		return streamOutput(conn, sessionID)
 	}
 }
 
-func tmuxAttach(sessionID string) error {
+func tmuxAttach(sessionID, sessionName string) error {
 	tmuxName := "ai-mux-" + sessionID
 	tmuxPath, err := exec.LookPath("tmux")
 	if err != nil {
 		return fmt.Errorf("tmux not found: %w", err)
 	}
+	exe, _ := os.Executable()
+	exec.Command(tmuxPath, "set-option", "-t", tmuxName, "status-right",
+		" ctrl-b d: detach | ctrl-b n: rename ").Run()
+	renameTemplate := fmt.Sprintf(
+		`run-shell '%s session rename %s "%%%%" >/dev/null 2>&1 && tmux display-message "Session renamed" || tmux display-message "Rename failed"'`,
+		exe, sessionID)
+	exec.Command(tmuxPath, "bind-key", "-T", "prefix", "n",
+		"command-prompt", "-I", sessionName, "-p", "Session name:", renameTemplate).Run()
 	return syscall.Exec(tmuxPath, []string{"tmux", "attach-session", "-t", tmuxName}, os.Environ())
 }
 

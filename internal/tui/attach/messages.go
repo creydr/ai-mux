@@ -33,6 +33,7 @@ type SpawnSessionMsg struct {
 
 type AttachSessionMsg struct {
 	SessionID string
+	Name      string
 	Status    string
 }
 
