@@ -212,14 +212,6 @@ func (p *GitHubProvider) ListComments(ctx context.Context, repo provider.RepoRef
 	return comments, nil
 }
 
-func (p *GitHubProvider) AssignUser(ctx context.Context, repo provider.RepoRef, number int, username string) error {
-	_, _, err := p.client.Issues.AddAssignees(ctx, repo.Owner, repo.Repo, number, []string{username})
-	if err != nil {
-		return fmt.Errorf("assigning user: %w", err)
-	}
-	return nil
-}
-
 func perPage(n int) int {
 	if n <= 0 {
 		return 30

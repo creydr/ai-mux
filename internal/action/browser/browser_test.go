@@ -23,17 +23,3 @@ func TestOpenCommand(t *testing.T) {
 		}
 	}
 }
-
-func TestAction_Name(t *testing.T) {
-	a := New()
-	if a.Name() != "Open in Browser" {
-		t.Errorf("expected 'Open in Browser', got %q", a.Name())
-	}
-}
-
-func TestAction_Type(t *testing.T) {
-	a := New()
-	if a.Type() != "open_browser" {
-		t.Errorf("expected 'open_browser', got %q", a.Type())
-	}
-}

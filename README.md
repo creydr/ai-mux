@@ -247,10 +247,8 @@ make integration-test
 cmd/ai-mux/          CLI entrypoint and cobra commands
 internal/
   acp/               ACP agent (JSON-RPC IDE integration)
-  action/            Action interface, registry, and implementations
-    agent/           AI agent runner with template args
-    assign/          Self-assignment action
-    browser/         Open-in-browser action
+  action/
+    browser/         Open-in-browser helper
   config/            Configuration loading and validation
   daemon/            Daemon core, client handling, PID management
   event/             Event types and channel-based event bus
@@ -277,7 +275,6 @@ internal/
 - **`provider.Provider`** — abstracts GitHub API (extensible to GitLab, etc.)
 - **`store.Store`** — state persistence (items, sessions, worktrees, poll times)
 - **`protocol.Transport`** — client/server transport (swappable: JSON lines, gRPC)
-- **`action.Action`** — executable actions with a registry for lookup
 - **`notifier.Notifier`** — event notification channels
 
 See [Design Document](docs/plans/2026-06-05-ai-mux-design.md) for full architecture details.

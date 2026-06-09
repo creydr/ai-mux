@@ -32,18 +32,18 @@ func ParseRepoRef(s string) (RepoRef, error) {
 }
 
 type Item struct {
-	ID        string
-	Type      ItemType
-	Repo      RepoRef
-	Number    int
-	Title     string
-	Body      string
-	Author    string
-	Labels    []string
-	State     string
-	URL       string
-	CreatedAt time.Time
-	UpdatedAt time.Time
+	ID         string
+	Type       ItemType
+	Repo       RepoRef
+	Number     int
+	Title      string
+	Body       string
+	Author     string
+	Labels     []string
+	State      string
+	URL        string
+	CreatedAt  time.Time
+	UpdatedAt  time.Time
 	HeadBranch string
 	Draft      bool
 	Mergeable  *bool
@@ -79,8 +79,4 @@ type Provider interface {
 	GetDiff(ctx context.Context, repo RepoRef, number int) (string, error)
 	ListReviews(ctx context.Context, repo RepoRef, number int) ([]Review, error)
 	ListComments(ctx context.Context, repo RepoRef, number int) ([]Comment, error)
-}
-
-type Assigner interface {
-	AssignUser(ctx context.Context, repo RepoRef, number int, username string) error
 }
