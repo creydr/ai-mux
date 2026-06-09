@@ -24,7 +24,7 @@ func init() {
 	rootCmd.AddCommand(versionCmd)
 	rootCmd.AddCommand(daemonCmd)
 	rootCmd.AddCommand(dashboardCmd)
-	rootCmd.AddCommand(attachCmd)
+	rootCmd.AddCommand(sessionCmd)
 }
 
 func Execute() error {

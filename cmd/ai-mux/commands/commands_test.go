@@ -12,7 +12,7 @@ func TestRootCommand_SubcommandRegistration(t *testing.T) {
 		names[cmd.Name()] = true
 	}
 
-	for _, want := range []string{"version", "daemon", "dashboard", "attach"} {
+	for _, want := range []string{"version", "daemon", "dashboard", "session"} {
 		if !names[want] {
 			t.Errorf("missing subcommand %q", want)
 		}
@@ -69,14 +69,27 @@ func TestDaemonStartCommand_ForegroundFlag(t *testing.T) {
 	}
 }
 
-func TestAttachCommand_RequiresExactlyOneArg(t *testing.T) {
+func TestSessionCommand_SubcommandRegistration(t *testing.T) {
+	names := make(map[string]bool)
+	for _, cmd := range sessionCmd.Commands() {
+		names[cmd.Name()] = true
+	}
+
+	for _, want := range []string{"list", "attach"} {
+		if !names[want] {
+			t.Errorf("session missing subcommand %q", want)
+		}
+	}
+}
+
+func TestSessionAttachCommand_RequiresExactlyOneArg(t *testing.T) {
 	var buf bytes.Buffer
 	rootCmd.SetOut(&buf)
 	rootCmd.SetErr(&buf)
-	rootCmd.SetArgs([]string{"attach"})
+	rootCmd.SetArgs([]string{"session", "attach"})
 	err := rootCmd.Execute()
 	if err == nil {
-		t.Error("attach with no args should fail")
+		t.Error("session attach with no args should fail")
 	}
 }
 

@@ -8,12 +8,12 @@ A terminal-based tool for monitoring multiple GitHub repositories. Watches for n
 
 - **Daemon** — background process that polls GitHub, maintains state, manages sessions, and serves clients over a Unix socket
 - **Dashboard** — full-screen TUI showing all watched repos with tabbed Issues/PRs/Sessions views
-- **Attach** — focused TUI for a single issue or PR with markdown rendering
+- **Session CLI** — list and attach to agent sessions from outside the dashboard
 
 ```
 ┌──────────────┐     ┌──────────────┐
-│  Dashboard   │     │   Attach     │
-│   (TUI)      │     │   (TUI)      │
+│  Dashboard   │     │  Session CLI │
+│   (TUI)      │     │              │
 └──────┬───────┘     └──────┬───────┘
        │                    │
        └────────┬───────────┘
@@ -130,22 +130,20 @@ Keyboard shortcuts:
 - `s` — stop selected session
 - `Ctrl-c` — quit
 
-### Attach
+### Session
 
 ```sh
-# Attach to a specific issue
-ai-mux attach issue/owner/repo/42
+# List all sessions
+ai-mux session list
 
-# Attach to a specific PR
-ai-mux attach pr/owner/repo/123
+# Attach to a running session (opens tmux)
+ai-mux session attach <session-id>
+
+# View output of a completed session
+ai-mux session attach <session-id>
 ```
 
-Keyboard shortcuts:
-- Arrow keys — scroll
-- `a` — spawn agent session
-- `o` — open in browser
-- `r` — refresh
-- `q` / `Esc` — quit
+For running/pending sessions, `attach` opens the tmux session directly. For completed/failed/stopped sessions, it streams the captured output to stdout.
 
 ## Configuration Reference
 
