@@ -27,10 +27,3 @@ func (r *Runner) GetCommand(agentName string) string {
 	}
 	return agentName
 }
-
-func (r *Runner) GetPostSession(agentName string) string {
-	if a, ok := r.agents[agentName]; ok {
-		return a.PostSession
-	}
-	return "keep"
-}

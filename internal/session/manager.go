@@ -40,7 +40,6 @@ type WorktreeCreator interface {
 type CommandBuilder interface {
 	HasAgent(name string) bool
 	GetCommand(agentName string) string
-	GetPostSession(agentName string) string
 }
 
 type OutputSubscription struct {
@@ -54,7 +53,6 @@ type Manager struct {
 	tmux        TmuxExecutor
 	runner      CommandBuilder
 	worktrees   WorktreeCreator
-	postHandler func(repoPath, wtPath, postSession string)
 	repos       map[string]config.RepoConfig
 	store       *Store
 	outputDir   string
@@ -95,14 +93,10 @@ func NewManager(cfg ManagerConfig) *Manager {
 	runner := agentpkg.NewRunner(cfg.Agents)
 
 	m := &Manager{
-		sessions:  make(map[string]*Session),
-		tmux:      NewTmuxCLI(),
-		runner:    runner,
-		worktrees: wm,
-		postHandler: func(repoPath, wtPath, postSession string) {
-			handler := worktree.NewPostSessionHandler(postSession, wm)
-			handler.Handle(repoPath, wtPath, "")
-		},
+		sessions:    make(map[string]*Session),
+		tmux:        NewTmuxCLI(),
+		runner:      runner,
+		worktrees:   wm,
 		repos:       repos,
 		store:       cfg.Store,
 		outputDir:   cfg.OutputDir,
@@ -139,10 +133,6 @@ func (m *Manager) SetWorktrees(w WorktreeCreator) {
 
 func (m *Manager) SetRunner(r CommandBuilder) {
 	m.runner = r
-}
-
-func (m *Manager) SetPostHandler(fn func(repoPath, wtPath, postSession string)) {
-	m.postHandler = fn
 }
 
 func (m *Manager) Spawn(itemRepo string, itemNumber int, itemType string, agentName string, wtAction WorktreeAction) (*Session, error) {
@@ -495,7 +485,6 @@ func (m *Manager) monitorSession(sess *Session) {
 			}
 			delete(m.sessions, sessID)
 			m.mu.Unlock()
-			m.handlePostSession(sess)
 			m.notifyStatus(sess)
 			return
 		}
@@ -542,13 +531,6 @@ func (m *Manager) detectExitCode(sessionID string) *int {
 		return nil
 	}
 	return &code
-}
-
-func (m *Manager) handlePostSession(sess *Session) {
-	if m.postHandler != nil {
-		postSession := m.runner.GetPostSession(sess.Agent)
-		m.postHandler(sess.RepoPath, sess.Worktree, postSession)
-	}
 }
 
 func (m *Manager) notifyStatus(sess *Session) {

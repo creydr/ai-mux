@@ -23,7 +23,6 @@ github:
 agents:
   - name: claude
     command: claude
-    post_session: auto-pr
 
 default_agent: claude
 
@@ -56,9 +55,6 @@ notifications:
 	}
 	if len(cfg.Agents) != 1 {
 		t.Fatalf("expected 1 agent, got %d", len(cfg.Agents))
-	}
-	if cfg.Agents[0].PostSession != "auto-pr" {
-		t.Errorf("expected post_session auto-pr, got %s", cfg.Agents[0].PostSession)
 	}
 	if cfg.DefaultAgent != "claude" {
 		t.Errorf("expected default_agent claude, got %s", cfg.DefaultAgent)
@@ -163,16 +159,6 @@ func TestValidate_InvalidPollInterval(t *testing.T) {
 	}
 }
 
-func TestValidate_InvalidPostSession(t *testing.T) {
-	cfg := Default()
-	cfg.Repos = []RepoConfig{{Name: "o/r", Path: "/tmp"}}
-	cfg.Agents = []AgentConfig{{Name: "a", Command: "a", PostSession: "invalid"}}
-	err := cfg.Validate()
-	if err == nil {
-		t.Fatal("expected error for invalid post_session")
-	}
-}
-
 func TestValidate_DefaultAgentNotFound(t *testing.T) {
 	cfg := Default()
 	cfg.Repos = []RepoConfig{{Name: "o/r", Path: "/tmp"}}
@@ -186,7 +172,7 @@ func TestValidate_DefaultAgentNotFound(t *testing.T) {
 func TestValidate_ValidConfig(t *testing.T) {
 	cfg := Default()
 	cfg.Repos = []RepoConfig{{Name: "owner/repo", Path: "/tmp/repo"}}
-	cfg.Agents = []AgentConfig{{Name: "claude", Command: "claude", PostSession: "keep"}}
+	cfg.Agents = []AgentConfig{{Name: "claude", Command: "claude"}}
 	cfg.DefaultAgent = "claude"
 	err := cfg.Validate()
 	if err != nil {

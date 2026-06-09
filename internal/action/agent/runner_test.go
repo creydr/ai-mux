@@ -9,14 +9,12 @@ import (
 func testRunner() *Runner {
 	return NewRunner([]config.AgentConfig{
 		{
-			Name:        "claude",
-			Command:     "claude",
-			PostSession: "auto-pr",
+			Name:    "claude",
+			Command: "claude",
 		},
 		{
-			Name:        "gemini",
-			Command:     "gemini-cli run",
-			PostSession: "keep",
+			Name:    "gemini",
+			Command: "gemini-cli run",
 		},
 	})
 }
@@ -46,19 +44,5 @@ func TestRunner_GetCommand(t *testing.T) {
 	}
 	if cmd := r.GetCommand("unknown"); cmd != "unknown" {
 		t.Errorf("expected unknown as fallback, got %q", cmd)
-	}
-}
-
-func TestRunner_GetPostSession(t *testing.T) {
-	r := testRunner()
-
-	if ps := r.GetPostSession("claude"); ps != "auto-pr" {
-		t.Errorf("expected auto-pr, got %q", ps)
-	}
-	if ps := r.GetPostSession("gemini"); ps != "keep" {
-		t.Errorf("expected keep, got %q", ps)
-	}
-	if ps := r.GetPostSession("unknown"); ps != "keep" {
-		t.Errorf("expected keep for unknown, got %q", ps)
 	}
 }

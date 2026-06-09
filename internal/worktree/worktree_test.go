@@ -147,29 +147,3 @@ func TestManager_Cleanup(t *testing.T) {
 		t.Error("dirty worktree should remain")
 	}
 }
-
-func TestNewPostSessionHandler(t *testing.T) {
-	mgr := NewManager()
-
-	h := NewPostSessionHandler("keep", mgr)
-	if _, ok := h.(*KeepHandler); !ok {
-		t.Error("expected KeepHandler for 'keep'")
-	}
-
-	h = NewPostSessionHandler("auto-pr", mgr)
-	if _, ok := h.(*AutoPRHandler); !ok {
-		t.Error("expected AutoPRHandler for 'auto-pr'")
-	}
-
-	h = NewPostSessionHandler("", mgr)
-	if _, ok := h.(*KeepHandler); !ok {
-		t.Error("expected KeepHandler for empty string")
-	}
-}
-
-func TestKeepHandler(t *testing.T) {
-	h := &KeepHandler{}
-	if err := h.Handle("", "", ""); err != nil {
-		t.Errorf("KeepHandler should always succeed, got %v", err)
-	}
-}

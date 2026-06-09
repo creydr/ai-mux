@@ -42,9 +42,8 @@ type DesktopNotifyConfig struct {
 }
 
 type AgentConfig struct {
-	Name        string `yaml:"name"`
-	Command     string `yaml:"command"`
-	PostSession string `yaml:"post_session"`
+	Name    string `yaml:"name"`
+	Command string `yaml:"command"`
 }
 
 type ACPConfig struct {
@@ -139,9 +138,6 @@ func (c *Config) Validate() error {
 		}
 		if agent.Command == "" {
 			return fmt.Errorf("agent %q has no command", agent.Name)
-		}
-		if agent.PostSession != "" && agent.PostSession != "keep" && agent.PostSession != "auto-pr" {
-			return fmt.Errorf("agent %q has invalid post_session %q (must be keep or auto-pr)", agent.Name, agent.PostSession)
 		}
 	}
 

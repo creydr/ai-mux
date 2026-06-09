@@ -63,10 +63,8 @@ github:
 agents:
   - name: claude
     command: claude
-    post_session: keep
   - name: gemini
     command: gemini
-    post_session: keep
 
 default_agent: claude
 ```
@@ -199,7 +197,6 @@ echo '{"jsonrpc":"2.0","id":1,"method":"session/list","params":{}}' | ai-mux acp
 | `agents` | list | — | AI agent configurations |
 | `agents[].name` | string | required | Agent identifier |
 | `agents[].command` | string | required | Command to run the agent |
-| `agents[].post_session` | string | `keep` | What to do after agent finishes: `keep` or `auto-pr` |
 | `default_agent` | string | — | Default agent for actions |
 | `notifications.desktop.enabled` | bool | `false` | Enable desktop notifications |
 | `notifications.desktop.events` | list | all | Event types to notify on |
@@ -208,13 +205,7 @@ echo '{"jsonrpc":"2.0","id":1,"method":"session/list","params":{}}' | ai-mux acp
 
 ### Worktree Isolation
 
-Every agent action runs in an isolated git worktree at `<repo-path>/.worktrees/<action>-<number>`. This allows multiple agent sessions to run in parallel without interfering with each other or the current checkout.
-
-Post-session behavior per agent:
-- **`keep`** — worktree stays on disk after the agent finishes
-- **`auto-pr`** — commits changes, pushes, creates a draft PR, then removes the worktree
-
-Worktrees with no changes are always cleaned up automatically.
+Every agent session runs in an isolated git worktree at `<repo-path>/.worktrees/<action>-<number>`. This allows multiple agent sessions to run in parallel without interfering with each other or the current checkout. Worktrees with no changes are cleaned up automatically.
 
 ## Development
 
