@@ -170,15 +170,15 @@ func (d *Daemon) handleClient(ctx context.Context, cc *clientConn) {
 		cc.conn.Close()
 	}()
 
-	for {
+	go func() {
 		select {
 		case <-ctx.Done():
-			return
 		case <-cc.done:
-			return
-		default:
 		}
+		cc.conn.Close()
+	}()
 
+	for {
 		msg, err := cc.conn.Receive()
 		if err != nil {
 			return
