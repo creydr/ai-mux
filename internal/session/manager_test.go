@@ -157,12 +157,8 @@ func testManager(t *testing.T) (*Manager, *mockTmux) {
 	mgr := NewManager(ManagerConfig{
 		Agents: []config.AgentConfig{
 			{
-				Name:    "claude",
-				Command: "claude",
-				ArgsTemplates: map[string]string{
-					"fix_issue": "--print 'Fix issue #{{.Item.Number}}'",
-					"review_pr": "--print 'Review PR #{{.Item.Number}}'",
-				},
+				Name:        "claude",
+				Command:     "claude",
 				PostSession: "keep",
 			},
 		},
@@ -417,11 +413,8 @@ func TestManager_StatusCallback(t *testing.T) {
 	mgr := NewManager(ManagerConfig{
 		Agents: []config.AgentConfig{
 			{
-				Name:    "claude",
-				Command: "claude",
-				ArgsTemplates: map[string]string{
-					"fix_issue": "--print 'Fix #{{.Item.Number}}'",
-				},
+				Name:        "claude",
+				Command:     "claude",
 				PostSession: "keep",
 			},
 		},
@@ -497,7 +490,7 @@ func TestManager_PersistAndRestore(t *testing.T) {
 	mock := newMockTmux()
 	mgr := NewManager(ManagerConfig{
 		Agents: []config.AgentConfig{
-			{Name: "claude", Command: "claude", ArgsTemplates: map[string]string{"fix_issue": "fix"}, PostSession: "keep"},
+			{Name: "claude", Command: "claude", PostSession: "keep"},
 		},
 		Repos:       []config.RepoConfig{{Name: "owner/repo", Path: "/tmp/test-repo"}},
 		OutputDir:   t.TempDir(),
@@ -515,7 +508,7 @@ func TestManager_PersistAndRestore(t *testing.T) {
 
 	mgr2 := NewManager(ManagerConfig{
 		Agents: []config.AgentConfig{
-			{Name: "claude", Command: "claude", ArgsTemplates: map[string]string{"fix_issue": "fix"}, PostSession: "keep"},
+			{Name: "claude", Command: "claude", PostSession: "keep"},
 		},
 		Repos:       []config.RepoConfig{{Name: "owner/repo", Path: "/tmp/test-repo"}},
 		OutputDir:   t.TempDir(),

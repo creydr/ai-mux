@@ -64,15 +64,9 @@ agents:
   - name: claude
     command: claude
     post_session: keep
-    args_templates:
-      fix_issue: "Fix {{.Item.URL}}"
-      review_pr: "Review {{.Item.URL}}"
   - name: gemini
     command: gemini
     post_session: keep
-    args_templates:
-      fix_issue: "-i Fix {{.Item.URL}}"
-      review_pr: "-i Review {{.Item.URL}}"
 
 default_agent: claude
 ```
@@ -206,29 +200,11 @@ echo '{"jsonrpc":"2.0","id":1,"method":"session/list","params":{}}' | ai-mux acp
 | `agents[].name` | string | required | Agent identifier |
 | `agents[].command` | string | required | Command to run the agent |
 | `agents[].post_session` | string | `keep` | What to do after agent finishes: `keep` or `auto-pr` |
-| `agents[].args_templates` | map | — | Go templates for action-specific args |
 | `default_agent` | string | — | Default agent for actions |
 | `notifications.desktop.enabled` | bool | `false` | Enable desktop notifications |
 | `notifications.desktop.events` | list | all | Event types to notify on |
 | `dashboard.items_per_repo` | int | `3` | Items shown per repo before expanding |
 | `acp.socket` | string | `/tmp/ai-mux.sock` | Unix socket path |
-
-### Agent Template Variables
-
-Templates in `args_templates` have access to:
-
-| Variable | Description |
-|----------|-------------|
-| `{{.Item.Number}}` | Issue/PR number |
-| `{{.Item.Title}}` | Issue/PR title |
-| `{{.Item.Body}}` | Issue/PR description |
-| `{{.Item.URL}}` | GitHub URL |
-| `{{.Item.Author}}` | Author username |
-| `{{.Item.State}}` | State (open, closed, merged) |
-| `{{.Item.HeadBranch}}` | PR head branch (PRs only) |
-| `{{.Repo}}` | Repository name (owner/repo) |
-| `{{.RepoPath}}` | Local repository path |
-| `{{.Worktree}}` | Worktree path for this action |
 
 ### Worktree Isolation
 

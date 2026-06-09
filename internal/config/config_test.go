@@ -24,8 +24,6 @@ agents:
   - name: claude
     command: claude
     post_session: auto-pr
-    args_templates:
-      fix_issue: "--print 'Fix issue #{{.Number}}'"
 
 default_agent: claude
 

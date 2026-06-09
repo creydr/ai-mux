@@ -42,10 +42,9 @@ type DesktopNotifyConfig struct {
 }
 
 type AgentConfig struct {
-	Name          string            `yaml:"name"`
-	Command       string            `yaml:"command"`
-	PostSession   string            `yaml:"post_session"`
-	ArgsTemplates map[string]string `yaml:"args_templates"`
+	Name        string `yaml:"name"`
+	Command     string `yaml:"command"`
+	PostSession string `yaml:"post_session"`
 }
 
 type ACPConfig struct {
