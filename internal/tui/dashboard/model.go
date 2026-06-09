@@ -516,7 +516,7 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return m, openBrowserCmd(item.URL)
 		}
 		return m, nil
-	case msg.Code == 'c':
+	case msg.Code == 'a':
 		if m.activeTab == tabSessions {
 			return m, nil
 		}
@@ -748,7 +748,7 @@ func (m Model) statusBarText() string {
 	case tabSessions:
 		return "enter: attach (ctrl-b d: detach) | s: stop | tab: switch | ctrl-c: quit"
 	default:
-		return "c: agent | b: browser | tab: switch | r: refresh | ctrl-c: quit"
+		return "a: spawn agent | b: open in browser | tab: switch | r: refresh | ctrl-c: quit"
 	}
 }
 
