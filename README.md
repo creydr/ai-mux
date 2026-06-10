@@ -96,6 +96,7 @@ Keyboard shortcuts:
 - Arrow keys — navigate items
 - `Enter` — open item detail view
 - `a` — spawn agent session for selected item
+- `t` — attach to an existing session for this item
 - `b` / `o` — open item in browser
 - `r` — refresh
 - `Ctrl-c` — quit

@@ -26,6 +26,7 @@ const (
 	viewItemDetail
 	viewAgentPicker
 	viewWorktreeChoice
+	viewSessionPicker
 )
 
 type spawnRequest struct {
@@ -76,6 +77,9 @@ type Model struct {
 	agentCursor       int
 	pendingSpawn      *spawnRequest
 	worktreeChoiceIdx int
+
+	sessionPickerItems  []protocol.SessionPayload
+	sessionPickerCursor int
 
 	statusText   string
 	statusTickID int
@@ -325,6 +329,9 @@ func (m Model) View() tea.View {
 	if m.view == viewWorktreeChoice {
 		return m.renderWorktreeChoice()
 	}
+	if m.view == viewSessionPicker {
+		return m.renderSessionPicker()
+	}
 
 	var b strings.Builder
 
@@ -437,6 +444,9 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	}
 	if m.view == viewWorktreeChoice {
 		return m.handleWorktreeChoiceKey(msg)
+	}
+	if m.view == viewSessionPicker {
+		return m.handleSessionPickerKey(msg)
 	}
 	if m.view == viewItemDetail && m.itemDetail != nil {
 		updated, cmd := m.itemDetail.Update(msg)
@@ -623,6 +633,40 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.renameActive = true
 			m.renamingSession = sess.ID
 			m.renameInput = sess.Name
+			return m, nil
+		}
+		return m, nil
+	case msg.Code == 't':
+		if m.activeTab != tabSessions {
+			item := m.selectedItem()
+			if item == nil {
+				return m, nil
+			}
+			repo := item.Repo.String()
+			var matched []protocol.SessionPayload
+			for _, sess := range m.sessions {
+				if sess.Repo == repo && sess.Number == item.Number {
+					matched = append(matched, sess)
+				}
+			}
+			if len(matched) == 0 {
+				m.statusText = "No sessions for this item"
+				return m, m.scheduleStatusClear()
+			}
+			if len(matched) == 1 {
+				sess := matched[0]
+				if sess.Status == "running" || sess.Status == "pending" {
+					return m, tmuxAttachCmd(sess.ID, sess.Name)
+				}
+				m.attachedSession = &sess
+				if m.conn != nil {
+					return m, attachSessionCmd(m.conn, sess.ID)
+				}
+				return m, nil
+			}
+			m.sessionPickerItems = matched
+			m.sessionPickerCursor = 0
+			m.view = viewSessionPicker
 			return m, nil
 		}
 		return m, nil
@@ -826,7 +870,18 @@ func (m Model) statusBarText() string {
 	case tabSessions:
 		return "enter: attach | n: rename | s: stop | tab: switch | ctrl-c: quit"
 	default:
-		return "a: spawn agent | b: open in browser | tab: switch | r: refresh | ctrl-c: quit"
+		bar := "a: spawn agent"
+		if item := m.selectedItem(); item != nil {
+			repo := item.Repo.String()
+			for _, sess := range m.sessions {
+				if sess.Repo == repo && sess.Number == item.Number {
+					bar += " | t: attach"
+					break
+				}
+			}
+		}
+		bar += " | b: open in browser | tab: switch | r: refresh | ctrl-c: quit"
+		return bar
 	}
 }
 
@@ -1070,6 +1125,70 @@ func (m Model) renderWorktreeChoice() tea.View {
 			b.WriteString(selectedItemStyle.Render("> "+choice.label) + "\n")
 		} else {
 			b.WriteString("  " + choice.label + "\n")
+		}
+	}
+
+	b.WriteString("\n")
+	b.WriteString(statusBarStyle.Render("  enter: select | esc: cancel"))
+
+	v := tea.NewView(b.String())
+	v.AltScreen = true
+	return v
+}
+
+func (m Model) handleSessionPickerKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	switch {
+	case msg.Code == tea.KeyEscape || msg.Code == 'q':
+		m.view = viewOverview
+		m.sessionPickerItems = nil
+		m.rebuildViewport()
+		return m, nil
+	case msg.Code == 'j' || msg.Code == tea.KeyDown:
+		if m.sessionPickerCursor < len(m.sessionPickerItems)-1 {
+			m.sessionPickerCursor++
+		}
+		return m, nil
+	case msg.Code == 'k' || msg.Code == tea.KeyUp:
+		if m.sessionPickerCursor > 0 {
+			m.sessionPickerCursor--
+		}
+		return m, nil
+	case msg.Code == tea.KeyEnter:
+		if m.sessionPickerCursor < len(m.sessionPickerItems) {
+			sess := m.sessionPickerItems[m.sessionPickerCursor]
+			m.view = viewOverview
+			m.sessionPickerItems = nil
+			m.rebuildViewport()
+			if sess.Status == "running" || sess.Status == "pending" {
+				return m, tmuxAttachCmd(sess.ID, sess.Name)
+			}
+			m.attachedSession = &sess
+			if m.conn != nil {
+				return m, attachSessionCmd(m.conn, sess.ID)
+			}
+		}
+		return m, nil
+	}
+	return m, nil
+}
+
+func (m Model) renderSessionPicker() tea.View {
+	var b strings.Builder
+
+	b.WriteString(titleStyle.Render("  Select Session"))
+	b.WriteString("\n\n")
+
+	for i, s := range m.sessionPickerItems {
+		label := s.ID
+		if s.Name != "" {
+			label = s.Name + " (" + s.ID + ")"
+		}
+		badge := sessionBadge(s.Status, s.WaitingInput)
+		entry := fmt.Sprintf("%s  %s  %s", label, s.Agent, badge)
+		if i == m.sessionPickerCursor {
+			b.WriteString(selectedItemStyle.Render("> "+entry) + "\n")
+		} else {
+			b.WriteString("  " + entry + "\n")
 		}
 	}
 
