@@ -3,6 +3,7 @@ package worktree
 import (
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -119,7 +120,9 @@ func (m *Manager) Remove(repoPath, wtPath string) error {
 	branchName := filepath.Base(wtPath)
 	delCmd := exec.Command("git", "branch", "-D", "ai-mux/"+branchName)
 	delCmd.Dir = repoPath
-	delCmd.CombinedOutput()
+	if out, err := delCmd.CombinedOutput(); err != nil {
+		log.Printf("failed to delete branch ai-mux/%s: %s: %v", branchName, strings.TrimSpace(string(out)), err)
+	}
 
 	return nil
 }
