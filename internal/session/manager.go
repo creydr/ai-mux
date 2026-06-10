@@ -315,19 +315,17 @@ func (m *Manager) Stop(sessionID string) error {
 		m.mu.Unlock()
 		return fmt.Errorf("session %q is not active", sessionID)
 	}
-	m.stopMonitor(sessionID)
-	m.mu.Unlock()
-
-	m.tmux.SendKeys(sess.TmuxSession, "C-c")
-	time.Sleep(500 * time.Millisecond)
-	m.tmux.KillSession(sess.TmuxSession)
-
-	m.mu.Lock()
-	now := time.Now()
+	tmuxSession := sess.TmuxSession
 	sess.Status = StatusStopped
+	now := time.Now()
 	sess.CompletedAt = &now
+	m.stopMonitor(sessionID)
 	delete(m.sessions, sessionID)
 	m.mu.Unlock()
+
+	m.tmux.SendKeys(tmuxSession, "C-c")
+	time.Sleep(500 * time.Millisecond)
+	m.tmux.KillSession(tmuxSession)
 
 	m.notifyStatus(sess)
 	return nil
