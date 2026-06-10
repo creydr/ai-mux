@@ -99,6 +99,7 @@ Keyboard shortcuts:
 - `t` — attach to an existing session for this item
 - `b` / `o` — open item in browser
 - `r` — refresh
+- `?` — show keyboard shortcut help
 - `Ctrl-c` — quit
 
 **Item detail view:**
