@@ -83,10 +83,32 @@ func TestBus_Unsubscribe(t *testing.T) {
 
 	bus.Publish(Event{Type: TypeNewIssue, Timestamp: time.Now()})
 
-	_, ok := <-ch
-	if ok {
-		t.Error("expected channel to be closed after unsubscribe")
+	select {
+	case <-ch:
+		t.Error("should not receive events after unsubscribe")
+	case <-time.After(50 * time.Millisecond):
 	}
+}
+
+func TestBus_ConcurrentPublishUnsubscribe(t *testing.T) {
+	bus := NewBus()
+	defer bus.Close()
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for i := 0; i < 1000; i++ {
+			ch := bus.Subscribe()
+			bus.Publish(Event{Type: TypeNewIssue, Timestamp: time.Now()})
+			bus.Unsubscribe(ch)
+		}
+	}()
+
+	for i := 0; i < 1000; i++ {
+		bus.Publish(Event{Type: TypeNewPR, Timestamp: time.Now()})
+	}
+
+	<-done
 }
 
 func TestBus_Close(t *testing.T) {

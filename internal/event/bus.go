@@ -46,10 +46,7 @@ func (b *Bus) Unsubscribe(ch <-chan Event) {
 
 	for i, sub := range b.subscribers {
 		if sub.ch == ch {
-			if !sub.closed {
-				close(sub.ch)
-				sub.closed = true
-			}
+			sub.closed = true
 			b.subscribers = append(b.subscribers[:i], b.subscribers[i+1:]...)
 			return
 		}
