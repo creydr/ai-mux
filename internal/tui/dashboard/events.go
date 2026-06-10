@@ -48,6 +48,10 @@ func (m *Model) handleSessionEvent(sess protocol.SessionPayload) {
 				if m.sessionCursor >= len(m.sessions) && m.sessionCursor > 0 {
 					m.sessionCursor--
 				}
+				if m.attachedSession != nil && m.attachedSession.ID == sess.ID {
+					m.attachedSession = nil
+					m.view = viewOverview
+				}
 				break
 			}
 		}

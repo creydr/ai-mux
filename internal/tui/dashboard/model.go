@@ -153,8 +153,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.rebuildAttachViewport()
 		} else if m.view == viewItemDetail && m.itemDetail != nil {
 			updated, _ := m.itemDetail.Update(msg)
-			detail := updated.(attach.Model)
-			m.itemDetail = &detail
+			if detail, ok := updated.(attach.Model); ok {
+				m.itemDetail = &detail
+			}
 		} else {
 			m.rebuildViewport()
 		}
@@ -308,8 +309,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	default:
 		if m.view == viewItemDetail && m.itemDetail != nil {
 			updated, cmd := m.itemDetail.Update(msg)
-			detail := updated.(attach.Model)
-			m.itemDetail = &detail
+			if detail, ok := updated.(attach.Model); ok {
+				m.itemDetail = &detail
+			}
 			return m, cmd
 		}
 	}
