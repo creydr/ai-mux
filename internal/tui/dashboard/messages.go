@@ -17,10 +17,6 @@ type eventReceivedMsg struct {
 	event event.Event
 }
 
-type errMsg struct {
-	err error
-}
-
 type connectResultMsg struct {
 	err error
 }

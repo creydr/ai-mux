@@ -11,42 +11,43 @@ import (
 	"github.com/creydr/ai-mux/internal/event"
 	"github.com/creydr/ai-mux/internal/protocol"
 	"github.com/creydr/ai-mux/internal/provider"
+	"github.com/creydr/ai-mux/internal/tui"
 )
 
 func fetchItemsCmd(conn protocol.Conn, limit int) tea.Cmd {
 	return func() tea.Msg {
 		issueMsg, _ := protocol.NewRequest(protocol.MsgListIssues, "dash-issues", protocol.ListPayload{Limit: limit})
 		if err := conn.Send(issueMsg); err != nil {
-			return errMsg{err: err}
+			return tui.ErrMsg{Err: err}
 		}
 		issueResp, err := conn.Receive()
 		if err != nil {
-			return errMsg{err: err}
+			return tui.ErrMsg{Err: err}
 		}
 		var issues protocol.ItemsPayload
 		if err := json.Unmarshal(issueResp.Payload, &issues); err != nil {
-			return errMsg{err: fmt.Errorf("parsing issues: %w", err)}
+			return tui.ErrMsg{Err: fmt.Errorf("parsing issues: %w", err)}
 		}
 		var issueItems []provider.Item
 		if err := json.Unmarshal(issues.Items, &issueItems); err != nil {
-			return errMsg{err: fmt.Errorf("parsing issue items: %w", err)}
+			return tui.ErrMsg{Err: fmt.Errorf("parsing issue items: %w", err)}
 		}
 
 		prMsg, _ := protocol.NewRequest(protocol.MsgListPRs, "dash-prs", protocol.ListPayload{Limit: limit})
 		if err := conn.Send(prMsg); err != nil {
-			return errMsg{err: err}
+			return tui.ErrMsg{Err: err}
 		}
 		prResp, err := conn.Receive()
 		if err != nil {
-			return errMsg{err: err}
+			return tui.ErrMsg{Err: err}
 		}
 		var prs protocol.ItemsPayload
 		if err := json.Unmarshal(prResp.Payload, &prs); err != nil {
-			return errMsg{err: fmt.Errorf("parsing PRs: %w", err)}
+			return tui.ErrMsg{Err: fmt.Errorf("parsing PRs: %w", err)}
 		}
 		var prItems []provider.Item
 		if err := json.Unmarshal(prs.Items, &prItems); err != nil {
-			return errMsg{err: fmt.Errorf("parsing PR items: %w", err)}
+			return tui.ErrMsg{Err: fmt.Errorf("parsing PR items: %w", err)}
 		}
 
 		return itemsReceivedMsg{
@@ -67,19 +68,19 @@ func expandRepoCmd(conn protocol.Conn, repo string, itemType provider.ItemType, 
 
 		req, _ := protocol.NewRequest(msgType, "dash-expand", protocol.ListPayload{Repo: repo, Limit: limit})
 		if err := conn.Send(req); err != nil {
-			return errMsg{err: err}
+			return tui.ErrMsg{Err: err}
 		}
 		resp, err := conn.Receive()
 		if err != nil {
-			return errMsg{err: err}
+			return tui.ErrMsg{Err: err}
 		}
 		var payload protocol.ItemsPayload
 		if err := json.Unmarshal(resp.Payload, &payload); err != nil {
-			return errMsg{err: fmt.Errorf("parsing items: %w", err)}
+			return tui.ErrMsg{Err: fmt.Errorf("parsing items: %w", err)}
 		}
 		var items []provider.Item
 		if err := json.Unmarshal(payload.Items, &items); err != nil {
-			return errMsg{err: fmt.Errorf("parsing items: %w", err)}
+			return tui.ErrMsg{Err: fmt.Errorf("parsing items: %w", err)}
 		}
 
 		return repoExpandedMsg{
@@ -95,12 +96,12 @@ func listenEventsCmd(conn protocol.Conn) tea.Cmd {
 	return func() tea.Msg {
 		msg, err := conn.Receive()
 		if err != nil {
-			return errMsg{err: err}
+			return tui.ErrMsg{Err: err}
 		}
 		if msg.Type == protocol.MsgEvent {
 			var ev event.Event
 			if err := json.Unmarshal(msg.Payload, &ev); err != nil {
-				return errMsg{err: fmt.Errorf("parsing event: %w", err)}
+				return tui.ErrMsg{Err: fmt.Errorf("parsing event: %w", err)}
 			}
 			return eventReceivedMsg{event: ev}
 		}
@@ -121,18 +122,18 @@ func fetchSessionsCmd(conn protocol.Conn) tea.Cmd {
 	return func() tea.Msg {
 		req, _ := protocol.NewRequest(protocol.MsgSessionList, "dash-sessions", nil)
 		if err := conn.Send(req); err != nil {
-			return errMsg{err: err}
+			return tui.ErrMsg{Err: err}
 		}
 		resp, err := conn.Receive()
 		if err != nil {
-			return errMsg{err: err}
+			return tui.ErrMsg{Err: err}
 		}
 		if resp.Type == protocol.MsgError {
 			return sessionsReceivedMsg{}
 		}
 		var payload protocol.SessionListPayload
 		if err := json.Unmarshal(resp.Payload, &payload); err != nil {
-			return errMsg{err: fmt.Errorf("parsing sessions: %w", err)}
+			return tui.ErrMsg{Err: fmt.Errorf("parsing sessions: %w", err)}
 		}
 		return sessionsReceivedMsg{sessions: payload.Sessions}
 	}
@@ -148,11 +149,11 @@ func spawnSessionCmd(conn protocol.Conn, repo string, number int, itemType, agen
 			WorktreeAction: worktreeAction,
 		})
 		if err := conn.Send(req); err != nil {
-			return errMsg{err: err}
+			return tui.ErrMsg{Err: err}
 		}
 		resp, err := conn.Receive()
 		if err != nil {
-			return errMsg{err: err}
+			return tui.ErrMsg{Err: err}
 		}
 		if resp.Type == protocol.MsgWorktreeExists {
 			return worktreeExistsMsg{repo: repo, number: number, itemType: itemType, agent: agent}
@@ -160,13 +161,13 @@ func spawnSessionCmd(conn protocol.Conn, repo string, number int, itemType, agen
 		if resp.Type == protocol.MsgError {
 			var errPayload map[string]string
 			if err := json.Unmarshal(resp.Payload, &errPayload); err != nil {
-				return errMsg{err: fmt.Errorf("parsing error response: %w", err)}
+				return tui.ErrMsg{Err: fmt.Errorf("parsing error response: %w", err)}
 			}
 			return statusMsg{text: "Error: " + errPayload["error"]}
 		}
 		var sess protocol.SessionPayload
 		if err := json.Unmarshal(resp.Payload, &sess); err != nil {
-			return errMsg{err: fmt.Errorf("parsing session: %w", err)}
+			return tui.ErrMsg{Err: fmt.Errorf("parsing session: %w", err)}
 		}
 		return sessionSpawnedMsg{session: sess}
 	}
@@ -178,16 +179,16 @@ func stopSessionCmd(conn protocol.Conn, sessionID string) tea.Cmd {
 			SessionID: sessionID,
 		})
 		if err := conn.Send(req); err != nil {
-			return errMsg{err: err}
+			return tui.ErrMsg{Err: err}
 		}
 		resp, err := conn.Receive()
 		if err != nil {
-			return errMsg{err: err}
+			return tui.ErrMsg{Err: err}
 		}
 		if resp.Type == protocol.MsgError {
 			var errPayload map[string]string
 			if err := json.Unmarshal(resp.Payload, &errPayload); err != nil {
-				return errMsg{err: fmt.Errorf("parsing error response: %w", err)}
+				return tui.ErrMsg{Err: fmt.Errorf("parsing error response: %w", err)}
 			}
 			return statusMsg{text: "Error: " + errPayload["error"]}
 		}
@@ -201,16 +202,16 @@ func attachSessionCmd(conn protocol.Conn, sessionID string) tea.Cmd {
 			SessionID: sessionID,
 		})
 		if err := conn.Send(req); err != nil {
-			return errMsg{err: err}
+			return tui.ErrMsg{Err: err}
 		}
 		resp, err := conn.Receive()
 		if err != nil {
-			return errMsg{err: err}
+			return tui.ErrMsg{Err: err}
 		}
 		if resp.Type == protocol.MsgError {
 			var errPayload map[string]string
 			if err := json.Unmarshal(resp.Payload, &errPayload); err != nil {
-				return errMsg{err: fmt.Errorf("parsing error response: %w", err)}
+				return tui.ErrMsg{Err: fmt.Errorf("parsing error response: %w", err)}
 			}
 			return statusMsg{text: "Error: " + errPayload["error"]}
 		}

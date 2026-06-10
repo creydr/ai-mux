@@ -6,6 +6,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/creydr/ai-mux/internal/provider"
+	"github.com/creydr/ai-mux/internal/tui"
 )
 
 func testItem() *provider.Item {
@@ -193,7 +194,7 @@ func TestModel_Error(t *testing.T) {
 	ref := Ref{Type: provider.ItemTypeIssue, Owner: "o", Repo: "r", Number: 1}
 	m := New(nil, ref)
 
-	updated, cmd := m.Update(errMsg{err: fmt.Errorf("oops")})
+	updated, cmd := m.Update(tui.ErrMsg{Err: fmt.Errorf("oops")})
 	m = updated.(Model)
 	if cmd != nil {
 		rendered, _ := m.Update(cmd())

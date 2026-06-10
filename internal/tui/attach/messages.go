@@ -17,10 +17,6 @@ type commentsLoadedMsg struct {
 	comments []provider.Comment
 }
 
-type errMsg struct {
-	err error
-}
-
 type contentRenderedMsg struct {
 	lines []string
 }

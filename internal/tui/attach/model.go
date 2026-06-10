@@ -9,6 +9,7 @@ import (
 	browser "github.com/creydr/ai-mux/internal/action/browser"
 	"github.com/creydr/ai-mux/internal/protocol"
 	"github.com/creydr/ai-mux/internal/provider"
+	"github.com/creydr/ai-mux/internal/tui"
 )
 
 type Model struct {
@@ -80,8 +81,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case commentsLoadedMsg:
 		m.comments = msg.comments
 		return m, renderContentCmd(m.item, m.reviews, m.comments, m.width, m.err)
-	case errMsg:
-		m.err = msg.err
+	case tui.ErrMsg:
+		m.err = msg.Err
 		return m, renderContentCmd(m.item, m.reviews, m.comments, m.width, m.err)
 	case sessionsLoadedMsg:
 		if len(msg.sessions) == 0 {

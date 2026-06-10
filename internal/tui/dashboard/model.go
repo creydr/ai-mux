@@ -10,6 +10,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/creydr/ai-mux/internal/protocol"
 	"github.com/creydr/ai-mux/internal/provider"
+	"github.com/creydr/ai-mux/internal/tui"
 	"github.com/creydr/ai-mux/internal/tui/attach"
 )
 
@@ -176,8 +177,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.updateRepoList()
 		m.rebuildViewport()
 		return m, listenEventsCmd(m.conn)
-	case errMsg:
-		m.err = msg.err
+	case tui.ErrMsg:
+		m.err = msg.Err
 		m.loading = false
 		return m, nil
 	case connectResultMsg:

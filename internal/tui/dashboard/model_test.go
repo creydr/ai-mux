@@ -9,6 +9,7 @@ import (
 	"github.com/creydr/ai-mux/internal/event"
 	"github.com/creydr/ai-mux/internal/protocol"
 	"github.com/creydr/ai-mux/internal/provider"
+	"github.com/creydr/ai-mux/internal/tui"
 	"github.com/creydr/ai-mux/internal/tui/attach"
 )
 
@@ -80,7 +81,7 @@ func TestModel_LoadingClearedOnError(t *testing.T) {
 	m := New(nil, 3, nil, "")
 	m.loading = true
 
-	updated, _ := m.Update(errMsg{err: fmt.Errorf("fail")})
+	updated, _ := m.Update(tui.ErrMsg{Err: fmt.Errorf("fail")})
 	m = updated.(Model)
 
 	if m.loading {
@@ -284,7 +285,7 @@ func TestModel_WindowResize(t *testing.T) {
 
 func TestModel_ErrorMessage(t *testing.T) {
 	m := New(nil, 3, nil, "")
-	updated, _ := m.Update(errMsg{err: fmt.Errorf("connection failed")})
+	updated, _ := m.Update(tui.ErrMsg{Err: fmt.Errorf("connection failed")})
 	m = updated.(Model)
 
 	if m.err == nil {

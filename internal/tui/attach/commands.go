@@ -7,6 +7,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/creydr/ai-mux/internal/protocol"
 	"github.com/creydr/ai-mux/internal/provider"
+	"github.com/creydr/ai-mux/internal/tui"
 )
 
 func fetchItemCmd(conn protocol.Conn, ref Ref) tea.Cmd {
@@ -17,18 +18,18 @@ func fetchItemCmd(conn protocol.Conn, ref Ref) tea.Cmd {
 			Number: ref.Number,
 		})
 		if err != nil {
-			return errMsg{err: err}
+			return tui.ErrMsg{Err: err}
 		}
 		if err := conn.Send(msg); err != nil {
-			return errMsg{err: err}
+			return tui.ErrMsg{Err: err}
 		}
 		resp, err := conn.Receive()
 		if err != nil {
-			return errMsg{err: err}
+			return tui.ErrMsg{Err: err}
 		}
 		var item provider.Item
 		if err := json.Unmarshal(resp.Payload, &item); err != nil {
-			return errMsg{err: fmt.Errorf("parsing item: %w", err)}
+			return tui.ErrMsg{Err: fmt.Errorf("parsing item: %w", err)}
 		}
 		return itemLoadedMsg{item: &item}
 	}
