@@ -12,18 +12,11 @@ import (
 
 func fetchItemCmd(conn protocol.Conn, ref Ref) tea.Cmd {
 	return func() tea.Msg {
-		msg, err := protocol.NewRequest(protocol.MsgGetItem, "attach-item", protocol.GetItemPayload{
+		resp, err := protocol.SendRequest(conn, protocol.MsgGetItem, "attach-item", protocol.GetItemPayload{
 			Repo:   ref.Owner + "/" + ref.Repo,
 			Type:   string(ref.Type),
 			Number: ref.Number,
-		})
-		if err != nil {
-			return tui.ErrMsg{Err: err}
-		}
-		if err := conn.Send(msg); err != nil {
-			return tui.ErrMsg{Err: err}
-		}
-		resp, err := conn.Receive()
+		}, protocol.DefaultTimeout)
 		if err != nil {
 			return tui.ErrMsg{Err: err}
 		}

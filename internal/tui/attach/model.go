@@ -1,7 +1,6 @@
 package attach
 
 import (
-	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -262,19 +261,12 @@ func (m Model) handleSessionPickerKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) 
 
 func fetchItemSessionsCmd(conn protocol.Conn, ref Ref) tea.Cmd {
 	return func() tea.Msg {
-		req, err := protocol.NewRequest(protocol.MsgSessionList, "attach-sessions", nil)
-		if err != nil {
-			return statusTextMsg{text: "Failed to create request"}
-		}
-		if err := conn.Send(req); err != nil {
-			return statusTextMsg{text: "Failed to fetch sessions"}
-		}
-		resp, err := conn.Receive()
+		resp, err := protocol.SendRequest(conn, protocol.MsgSessionList, "attach-sessions", nil, protocol.DefaultTimeout)
 		if err != nil {
 			return statusTextMsg{text: "Failed to fetch sessions"}
 		}
-		var payload protocol.SessionListPayload
-		if err := json.Unmarshal(resp.Payload, &payload); err != nil {
+		payload, err := protocol.ParsePayload[protocol.SessionListPayload](resp)
+		if err != nil {
 			return statusTextMsg{text: "Failed to parse sessions"}
 		}
 		repo := ref.Owner + "/" + ref.Repo

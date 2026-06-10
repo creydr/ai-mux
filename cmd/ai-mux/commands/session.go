@@ -57,16 +57,9 @@ func runSessionList(cmd *cobra.Command, args []string) error {
 	}
 	defer conn.Close()
 
-	req, err := protocol.NewRequest(protocol.MsgSessionList, "cli-sessions", nil)
+	resp, err := protocol.SendRequest(conn, protocol.MsgSessionList, "cli-sessions", nil, protocol.DefaultTimeout)
 	if err != nil {
-		return fmt.Errorf("creating request: %w", err)
-	}
-	if err := conn.Send(req); err != nil {
-		return fmt.Errorf("sending request: %w", err)
-	}
-	resp, err := conn.Receive()
-	if err != nil {
-		return fmt.Errorf("receiving response: %w", err)
+		return err
 	}
 	if resp.Type == protocol.MsgError {
 		return fmt.Errorf("daemon error")
@@ -110,16 +103,9 @@ func runSessionAttach(cmd *cobra.Command, args []string) error {
 	}
 	defer conn.Close()
 
-	req, err := protocol.NewRequest(protocol.MsgSessionList, "cli-find", nil)
+	resp, err := protocol.SendRequest(conn, protocol.MsgSessionList, "cli-find", nil, protocol.DefaultTimeout)
 	if err != nil {
-		return fmt.Errorf("creating request: %w", err)
-	}
-	if err := conn.Send(req); err != nil {
-		return fmt.Errorf("sending request: %w", err)
-	}
-	resp, err := conn.Receive()
-	if err != nil {
-		return fmt.Errorf("receiving response: %w", err)
+		return err
 	}
 
 	var payload protocol.SessionListPayload
@@ -179,26 +165,15 @@ func runSessionRename(cmd *cobra.Command, args []string) error {
 	}
 	defer conn.Close()
 
-	req, err := protocol.NewRequest(protocol.MsgSessionRename, "cli-rename", protocol.SessionRenamePayload{
+	resp, err := protocol.SendRequest(conn, protocol.MsgSessionRename, "cli-rename", protocol.SessionRenamePayload{
 		SessionID: sessionID,
 		Name:      name,
-	})
+	}, protocol.DefaultTimeout)
 	if err != nil {
-		return fmt.Errorf("creating request: %w", err)
-	}
-	if err := conn.Send(req); err != nil {
-		return fmt.Errorf("sending request: %w", err)
-	}
-	resp, err := conn.Receive()
-	if err != nil {
-		return fmt.Errorf("receiving response: %w", err)
+		return err
 	}
 	if resp.Type == protocol.MsgError {
-		var errPayload map[string]string
-		if err := json.Unmarshal(resp.Payload, &errPayload); err != nil {
-			return fmt.Errorf("rename failed")
-		}
-		return fmt.Errorf("rename failed: %s", errPayload["error"])
+		return fmt.Errorf("rename failed: %s", protocol.ParseErrorPayload(resp))
 	}
 
 	fmt.Fprintf(cmd.OutOrStdout(), "session %s renamed to %q\n", sessionID, name)
@@ -206,19 +181,11 @@ func runSessionRename(cmd *cobra.Command, args []string) error {
 }
 
 func streamOutput(conn protocol.Conn, sessionID string) error {
-	req, err := protocol.NewRequest(protocol.MsgSessionAttach, "cli-attach", protocol.SessionIDPayload{
+	resp, err := protocol.SendRequest(conn, protocol.MsgSessionAttach, "cli-attach", protocol.SessionIDPayload{
 		SessionID: sessionID,
-	})
+	}, protocol.DefaultTimeout)
 	if err != nil {
-		return fmt.Errorf("creating request: %w", err)
-	}
-	if err := conn.Send(req); err != nil {
-		return fmt.Errorf("sending attach request: %w", err)
-	}
-
-	resp, err := conn.Receive()
-	if err != nil {
-		return fmt.Errorf("receiving response: %w", err)
+		return err
 	}
 	if resp.Type == protocol.MsgError {
 		return fmt.Errorf("attach failed")
