@@ -907,8 +907,8 @@ func TestModel_ScrollToBottom_ManyRepos(t *testing.T) {
 
 func testSessions() []protocol.SessionPayload {
 	return []protocol.SessionPayload{
-		{ID: "fix-1-abc", Repo: "o/r", Number: 1, ItemType: "issue", Agent: "claude", Status: "running", CreatedAt: time.Now().Add(-2 * time.Minute).Format(time.RFC3339)},
-		{ID: "rev-10-xyz", Repo: "o/r", Number: 10, ItemType: "pr", Agent: "claude", Status: "completed", CreatedAt: time.Now().Add(-5 * time.Minute).Format(time.RFC3339)},
+		{ID: "fix-1-abc", Name: "fix-bug", Repo: "o/r", Number: 1, ItemType: "issue", Agent: "claude", Status: "running", CreatedAt: time.Now().Add(-2 * time.Minute).Format(time.RFC3339)},
+		{ID: "rev-10-xyz", Name: "review-pr", Repo: "o/r", Number: 10, ItemType: "pr", Agent: "claude", Status: "completed", CreatedAt: time.Now().Add(-5 * time.Minute).Format(time.RFC3339)},
 	}
 }
 
@@ -1188,6 +1188,285 @@ func TestModel_TmuxDetachedReturnsToOverview(t *testing.T) {
 
 	if m.view != viewOverview {
 		t.Error("should be in overview after tmux detach")
+	}
+}
+
+func TestModel_StatusBarText(t *testing.T) {
+	m := New(nil, 3, nil, "")
+	issues, _ := testItems()
+	m.issues = issues
+	m.updateRepoList()
+
+	text := m.statusBarText()
+	if !containsString(text, "spawn agent") {
+		t.Error("issues tab should show spawn agent hint")
+	}
+	if containsString(text, "t: attach") {
+		t.Error("should not show t: attach without matching sessions")
+	}
+
+	m.sessions = []protocol.SessionPayload{
+		{ID: "s1", Repo: "o/r", Number: 1, Status: "running"},
+	}
+	text = m.statusBarText()
+	if !containsString(text, "t: attach") {
+		t.Error("should show t: attach when session exists for selected item")
+	}
+
+	m.activeTab = tabSessions
+	text = m.statusBarText()
+	if !containsString(text, "rename") {
+		t.Error("sessions tab should show rename hint")
+	}
+
+	m.renameActive = true
+	text = m.statusBarText()
+	if !containsString(text, "confirm") {
+		t.Error("rename mode should show confirm hint")
+	}
+}
+
+func TestModel_HandleRenameKey(t *testing.T) {
+	m := New(nil, 3, nil, "")
+	m.activeTab = tabSessions
+	m.sessions = testSessions()
+	m.sessionCursor = 0
+
+	updated, _ := m.Update(tea.KeyPressMsg{Code: 'n'})
+	m = updated.(Model)
+	if !m.renameActive {
+		t.Fatal("n should activate rename")
+	}
+
+	updated, _ = m.Update(tea.KeyPressMsg{Code: 'X', Text: "X"})
+	m = updated.(Model)
+	if m.renameInput != m.sessions[0].Name+"X" {
+		t.Errorf("renameInput = %q, want suffix X", m.renameInput)
+	}
+
+	updated, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyBackspace})
+	m = updated.(Model)
+	if m.renameInput != m.sessions[0].Name {
+		t.Error("backspace should remove last char")
+	}
+
+	updated, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+	m = updated.(Model)
+	if m.renameActive {
+		t.Error("Escape should cancel rename")
+	}
+	if m.renameInput != "" {
+		t.Error("renameInput should be cleared after cancel")
+	}
+}
+
+func TestModel_HandleRenameKey_Enter(t *testing.T) {
+	m := New(nil, 3, nil, "")
+	m.renameActive = true
+	m.renamingSession = "fix-1-abc"
+	m.renameInput = "new-name"
+
+	updated, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	m = updated.(Model)
+	if m.renameActive {
+		t.Error("Enter should deactivate rename")
+	}
+	if m.renameInput != "" {
+		t.Error("renameInput should be cleared after confirm")
+	}
+}
+
+func TestModel_HandleAgentPickerKey(t *testing.T) {
+	m := New(nil, 3, []string{"claude", "gpt", "gemini"}, "")
+	m.view = viewAgentPicker
+	m.pendingSpawn = &spawnRequest{repo: "o/r", number: 1, itemType: "issue"}
+	m.agentCursor = 0
+
+	updated, _ := m.Update(tea.KeyPressMsg{Code: 'j'})
+	m = updated.(Model)
+	if m.agentCursor != 1 {
+		t.Errorf("agentCursor = %d, want 1", m.agentCursor)
+	}
+
+	updated, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyDown})
+	m = updated.(Model)
+	if m.agentCursor != 2 {
+		t.Errorf("agentCursor = %d, want 2", m.agentCursor)
+	}
+
+	updated, _ = m.Update(tea.KeyPressMsg{Code: 'j'})
+	m = updated.(Model)
+	if m.agentCursor != 2 {
+		t.Error("should not go past last agent")
+	}
+
+	updated, _ = m.Update(tea.KeyPressMsg{Code: 'k'})
+	m = updated.(Model)
+	if m.agentCursor != 1 {
+		t.Errorf("agentCursor = %d, want 1", m.agentCursor)
+	}
+
+	updated, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+	m = updated.(Model)
+	if m.view != viewOverview {
+		t.Error("Escape should return to overview")
+	}
+	if m.pendingSpawn != nil {
+		t.Error("pendingSpawn should be nil after cancel")
+	}
+}
+
+func TestModel_AgentPickerRender(t *testing.T) {
+	m := New(nil, 3, []string{"claude", "gpt"}, "")
+	m.view = viewAgentPicker
+	m.pendingSpawn = &spawnRequest{repo: "o/r", number: 1, itemType: "issue"}
+	m.agentCursor = 0
+	m.width = 80
+
+	view := m.View()
+	if !containsString(view.Content, "Select Agent") {
+		t.Error("should show agent picker title")
+	}
+	if !containsString(view.Content, "claude") {
+		t.Error("should show agent names")
+	}
+}
+
+func TestModel_HandleWorktreeChoiceKey(t *testing.T) {
+	m := New(nil, 3, []string{"claude"}, "")
+	m.view = viewWorktreeChoice
+	m.pendingSpawn = &spawnRequest{repo: "o/r", number: 1, itemType: "issue", agent: "claude"}
+	m.worktreeChoiceIdx = 0
+
+	updated, _ := m.Update(tea.KeyPressMsg{Code: 'j'})
+	m = updated.(Model)
+	if m.worktreeChoiceIdx != 1 {
+		t.Errorf("worktreeChoiceIdx = %d, want 1", m.worktreeChoiceIdx)
+	}
+
+	updated, _ = m.Update(tea.KeyPressMsg{Code: 'j'})
+	m = updated.(Model)
+	if m.worktreeChoiceIdx != 2 {
+		t.Errorf("worktreeChoiceIdx = %d, want 2", m.worktreeChoiceIdx)
+	}
+
+	updated, _ = m.Update(tea.KeyPressMsg{Code: 'j'})
+	m = updated.(Model)
+	if m.worktreeChoiceIdx != 2 {
+		t.Error("should not go past last choice")
+	}
+
+	updated, _ = m.Update(tea.KeyPressMsg{Code: 'k'})
+	m = updated.(Model)
+	if m.worktreeChoiceIdx != 1 {
+		t.Errorf("worktreeChoiceIdx = %d, want 1", m.worktreeChoiceIdx)
+	}
+
+	updated, _ = m.Update(tea.KeyPressMsg{Code: 'q'})
+	m = updated.(Model)
+	if m.view != viewOverview {
+		t.Error("q should return to overview")
+	}
+	if m.pendingSpawn != nil {
+		t.Error("pendingSpawn should be nil after cancel")
+	}
+}
+
+func TestModel_WorktreeChoiceRender(t *testing.T) {
+	m := New(nil, 3, nil, "")
+	m.view = viewWorktreeChoice
+	m.pendingSpawn = &spawnRequest{repo: "o/r", number: 1, itemType: "issue", agent: "claude"}
+	m.width = 80
+
+	view := m.View()
+	if !containsString(view.Content, "Worktree Already Exists") {
+		t.Error("should show worktree choice title")
+	}
+	if !containsString(view.Content, "Resume") {
+		t.Error("should show resume option")
+	}
+}
+
+func TestModel_HandleSessionPickerKey(t *testing.T) {
+	sessions := testSessions()
+	m := New(nil, 3, nil, "")
+	m.view = viewSessionPicker
+	m.sessionPickerItems = sessions
+	m.sessionPickerCursor = 0
+
+	updated, _ := m.Update(tea.KeyPressMsg{Code: 'j'})
+	m = updated.(Model)
+	if m.sessionPickerCursor != 1 {
+		t.Errorf("sessionPickerCursor = %d, want 1", m.sessionPickerCursor)
+	}
+
+	updated, _ = m.Update(tea.KeyPressMsg{Code: 'j'})
+	m = updated.(Model)
+	if m.sessionPickerCursor != 1 {
+		t.Error("should not go past last session")
+	}
+
+	updated, _ = m.Update(tea.KeyPressMsg{Code: 'k'})
+	m = updated.(Model)
+	if m.sessionPickerCursor != 0 {
+		t.Errorf("sessionPickerCursor = %d, want 0", m.sessionPickerCursor)
+	}
+
+	updated, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+	m = updated.(Model)
+	if m.view != viewOverview {
+		t.Error("Escape should return to overview")
+	}
+	if m.sessionPickerItems != nil {
+		t.Error("sessionPickerItems should be nil after cancel")
+	}
+}
+
+func TestModel_SessionPickerEnterRunning(t *testing.T) {
+	m := New(nil, 3, nil, "")
+	m.view = viewSessionPicker
+	m.sessionPickerItems = []protocol.SessionPayload{
+		{ID: "s1", Status: "running", Name: "test"},
+	}
+	m.sessionPickerCursor = 0
+
+	updated, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	m = updated.(Model)
+	if m.view != viewOverview {
+		t.Error("Enter should return to overview")
+	}
+	if cmd == nil {
+		t.Error("Enter on running session should return a command")
+	}
+}
+
+func TestModel_SessionPickerRender(t *testing.T) {
+	m := New(nil, 3, nil, "")
+	m.view = viewSessionPicker
+	m.sessionPickerItems = testSessions()
+	m.width = 80
+
+	view := m.View()
+	if !containsString(view.Content, "Select Session") {
+		t.Error("should show session picker title")
+	}
+}
+
+func TestModel_ExpandableRepoAtCursor(t *testing.T) {
+	m := New(nil, 3, nil, "")
+	issues, _ := testItems()
+	m.issues = issues
+	m.cursor = 0
+
+	repo := m.expandableRepoAtCursor()
+	if repo != "" {
+		t.Errorf("should return empty string for item row, got %q", repo)
+	}
+
+	m.cursor = 99
+	repo = m.expandableRepoAtCursor()
+	if repo != "" {
+		t.Errorf("should return empty string for out of bounds cursor, got %q", repo)
 	}
 }
 

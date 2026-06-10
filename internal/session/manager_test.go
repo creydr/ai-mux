@@ -545,3 +545,125 @@ func TestGenerateID(t *testing.T) {
 		t.Errorf("ID too short: %q", id1)
 	}
 }
+
+func TestSanitizeBranchName(t *testing.T) {
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{"claude", "claude"},
+		{"my agent", "my-agent"},
+		{"agent/v2", "agent-v2"},
+		{"--leading--", "leading"},
+		{"special!@#chars", "special-chars"},
+		{"a..b", "a..b"},
+		{"hello_world-1.0", "hello_world-1.0"},
+		{"claude (YOLO)", "claude-YOLO"},
+		{"  spaces  ", "spaces"},
+		{"a", "a"},
+		{"", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			got := sanitizeBranchName(tt.input)
+			if got != tt.want {
+				t.Errorf("sanitizeBranchName(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestStripANSI(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{"plain text", "hello world", "hello world"},
+		{"color code", "\x1b[31mred\x1b[0m", "red"},
+		{"bold", "\x1b[1mbold\x1b[0m text", "bold text"},
+		{"cursor move", "\x1b[2Aup", "up"},
+		{"osc sequence", "\x1b]0;title\x07rest", "rest"},
+		{"mixed", "\x1b[1mbold\x1b[0m and \x1b[32mgreen\x1b[0m", "bold and green"},
+		{"empty", "", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := string(stripANSI([]byte(tt.input)))
+			if got != tt.want {
+				t.Errorf("stripANSI(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestManager_Rename(t *testing.T) {
+	mgr, _ := testManager(t)
+	sess, err := mgr.Spawn("owner/repo", 42, "issue", "claude", "")
+	if err != nil {
+		t.Fatalf("Spawn failed: %v", err)
+	}
+
+	if err := mgr.Rename(sess.ID, "my-session"); err != nil {
+		t.Fatalf("Rename failed: %v", err)
+	}
+
+	got, err := mgr.Get(sess.ID)
+	if err != nil {
+		t.Fatalf("Get failed: %v", err)
+	}
+	if got.Name != "my-session" {
+		t.Errorf("Name = %q, want %q", got.Name, "my-session")
+	}
+}
+
+func TestManager_Rename_NotFound(t *testing.T) {
+	mgr, _ := testManager(t)
+	err := mgr.Rename("nonexistent", "name")
+	if err == nil {
+		t.Fatal("expected error for nonexistent session")
+	}
+}
+
+func TestManager_WorktreeExists(t *testing.T) {
+	mgr, _ := testManager(t)
+
+	if mgr.WorktreeExists("owner/repo", 42, "issue", "claude") {
+		t.Error("worktree should not exist before spawn")
+	}
+
+	_, err := mgr.Spawn("owner/repo", 42, "issue", "claude", "")
+	if err != nil {
+		t.Fatalf("Spawn failed: %v", err)
+	}
+
+	if !mgr.WorktreeExists("owner/repo", 42, "issue", "claude") {
+		t.Error("worktree should exist after spawn")
+	}
+
+	if mgr.WorktreeExists("unknown/repo", 42, "issue", "claude") {
+		t.Error("worktree should not exist for unknown repo")
+	}
+}
+
+func TestManager_FindByWorktree(t *testing.T) {
+	mgr, _ := testManager(t)
+
+	sess, err := mgr.Spawn("owner/repo", 42, "issue", "claude", "")
+	if err != nil {
+		t.Fatalf("Spawn failed: %v", err)
+	}
+
+	found := mgr.FindByWorktree(sess.Worktree)
+	if found == nil {
+		t.Fatal("should find session by worktree path")
+	}
+	if found.ID != sess.ID {
+		t.Errorf("found ID = %q, want %q", found.ID, sess.ID)
+	}
+
+	notFound := mgr.FindByWorktree("/nonexistent/path")
+	if notFound != nil {
+		t.Error("should not find session for unknown worktree path")
+	}
+}
