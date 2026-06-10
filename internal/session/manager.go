@@ -617,10 +617,13 @@ func (m *Manager) persist() {
 func (m *Manager) saveFinalScreen(tmuxName, sessionID string) {
 	output, err := m.tmux.CapturePane(tmuxName)
 	if err != nil {
+		log.Printf("failed to capture pane for session %s: %v", sessionID, err)
 		return
 	}
 	screenFile := filepath.Join(m.outputDir, sessionID, "screen.txt")
-	os.WriteFile(screenFile, []byte(output), 0644)
+	if err := os.WriteFile(screenFile, []byte(output), 0644); err != nil {
+		log.Printf("failed to save final screen for session %s: %v", sessionID, err)
+	}
 }
 
 func (m *Manager) pollCapturePane(ctx context.Context, tmuxName string, ch chan<- []byte) {
