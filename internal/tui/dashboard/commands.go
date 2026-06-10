@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strings"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/creydr/ai-mux/internal/action/browser"
@@ -188,7 +189,8 @@ func tmuxAttachCmd(sessionID, sessionName string) tea.Cmd {
 
 	renameTemplate := fmt.Sprintf(
 		`run-shell '%s session rename %s "%%%%" >/dev/null 2>&1 && tmux display-message "Session renamed" || tmux display-message "Rename failed"'`,
-		exe, sessionID)
+		strings.ReplaceAll(exe, "'", "'\\''"),
+		strings.ReplaceAll(sessionID, "'", "'\\''"))
 	_ = exec.Command("tmux", "bind-key", "-T", "prefix", "n",
 		"command-prompt", "-I", sessionName, "-p", "Session name:", renameTemplate).Run()
 

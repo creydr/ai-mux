@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strings"
 	"syscall"
 	"text/tabwriter"
 
@@ -12,6 +13,10 @@ import (
 	"github.com/creydr/ai-mux/internal/protocol/jsonlines"
 	"github.com/spf13/cobra"
 )
+
+func shellQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", "'\\''") + "'"
+}
 
 var sessionCmd = &cobra.Command{
 	Use:   "session",
@@ -143,7 +148,8 @@ func tmuxAttach(sessionID, sessionName string) error {
 		" ctrl-b d: detach | ctrl-b n: rename ").Run()
 	renameTemplate := fmt.Sprintf(
 		`run-shell '%s session rename %s "%%%%" >/dev/null 2>&1 && tmux display-message "Session renamed" || tmux display-message "Rename failed"'`,
-		exe, sessionID)
+		strings.ReplaceAll(exe, "'", "'\\''"),
+		strings.ReplaceAll(sessionID, "'", "'\\''"))
 	_ = exec.Command(tmuxPath, "bind-key", "-T", "prefix", "n",
 		"command-prompt", "-I", sessionName, "-p", "Session name:", renameTemplate).Run()
 	return syscall.Exec(tmuxPath, []string{"tmux", "attach-session", "-t", tmuxName}, os.Environ())
