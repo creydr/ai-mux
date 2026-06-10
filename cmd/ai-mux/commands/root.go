@@ -2,6 +2,7 @@ package commands
 
 import (
 	"fmt"
+	"log"
 
 	"github.com/creydr/ai-mux/internal/config"
 	"github.com/spf13/cobra"
@@ -42,6 +43,9 @@ func loadConfig() (*config.Config, error) {
 	}
 	if err := c.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid config: %w", err)
+	}
+	for _, w := range c.Warnings() {
+		log.Printf("WARNING: %s", w)
 	}
 	return c, nil
 }

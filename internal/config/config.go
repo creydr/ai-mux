@@ -19,6 +19,8 @@ type Config struct {
 	DefaultAgent  string          `yaml:"defaultAgent"`
 	Daemon        DaemonConfig    `yaml:"daemon"`
 	Dashboard     DashboardConfig `yaml:"dashboard"`
+
+	configPath string
 }
 
 type RepoConfig struct {
@@ -108,7 +110,25 @@ func Load(path string) (*Config, error) {
 		cfg.Repos[i].Path = expandHome(repo.Path)
 	}
 
+	cfg.configPath = path
 	return cfg, nil
+}
+
+func (c *Config) Warnings() []string {
+	var warnings []string
+	if c.GitHub.Token != "" {
+		warnings = append(warnings, "github.token stores a plaintext token in the config file; prefer tokenFrom or tokenEnv")
+		if c.configPath != "" {
+			if info, err := os.Stat(c.configPath); err == nil {
+				if info.Mode().Perm()&0o077 != 0 {
+					warnings = append(warnings,
+						fmt.Sprintf("config file %s is group/world-readable (mode %04o); consider chmod 600",
+							c.configPath, info.Mode().Perm()))
+				}
+			}
+		}
+	}
+	return warnings
 }
 
 func (c *Config) Validate() error {
@@ -129,8 +149,12 @@ func (c *Config) Validate() error {
 		}
 	}
 
+	const minPollInterval = 10 * time.Second
 	if c.PollInterval.Duration <= 0 {
 		return fmt.Errorf("pollInterval must be positive")
+	}
+	if c.PollInterval.Duration < minPollInterval {
+		return fmt.Errorf("pollInterval must be at least %s to avoid API rate limits", minPollInterval)
 	}
 
 	for i, agent := range c.Agents {
