@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os/exec"
 	"runtime"
+	"strings"
 
 	"github.com/creydr/ai-mux/internal/event"
 )
@@ -86,10 +87,17 @@ func sendNotification(title, body string) error {
 	return cmd.Run()
 }
 
+func appleScriptQuote(s string) string {
+	s = strings.ReplaceAll(s, "\\", "\\\\")
+	s = strings.ReplaceAll(s, "\"", "\\\"")
+	return "\"" + s + "\""
+}
+
 func buildCommand(title, body string) *exec.Cmd {
 	switch runtime.GOOS {
 	case "darwin":
-		script := fmt.Sprintf(`display notification %q with title %q`, body, title)
+		script := fmt.Sprintf("display notification %s with title %s",
+			appleScriptQuote(body), appleScriptQuote(title))
 		return exec.Command("osascript", "-e", script)
 	default:
 		return exec.Command("notify-send", "--app-name=ai-mux", title, body)
