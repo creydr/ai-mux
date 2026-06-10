@@ -3,6 +3,7 @@ package session
 import (
 	"context"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -452,10 +453,12 @@ func (m *Manager) Reconcile() error {
 		name := tmuxPrefix + id
 		sess := &Session{
 			ID:          id,
+			Name:        "(recovered)",
 			TmuxSession: name,
 			Status:      StatusRunning,
 			CreatedAt:   time.Now(),
 		}
+		log.Printf("recovered orphaned tmux session %s with limited metadata", name)
 		m.sessions[id] = sess
 		m.startMonitor(sess)
 	}
