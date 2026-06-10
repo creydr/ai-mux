@@ -132,7 +132,6 @@ func (d *Daemon) Stop() {
 func (d *Daemon) cleanup() error {
 	d.clientsMu.Lock()
 	for _, c := range d.clients {
-		close(c.done)
 		c.conn.Close()
 	}
 	d.clients = make(map[string]*clientConn)
@@ -171,6 +170,7 @@ func (d *Daemon) acceptLoop(ctx context.Context) {
 
 func (d *Daemon) handleClient(ctx context.Context, cc *clientConn) {
 	defer func() {
+		close(cc.done)
 		if cc.outputCancel != nil {
 			cc.outputCancel()
 		}
