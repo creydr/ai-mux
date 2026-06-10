@@ -391,8 +391,12 @@ func (d *Daemon) handleSessionSpawn(cc *clientConn, msg protocol.Message) {
 	sess, err := d.sessionMgr.Spawn(payload.Repo, payload.Number, payload.ItemType, payload.Agent, wtAction)
 	if err != nil {
 		if errors.Is(err, worktree.ErrWorktreeExists) {
-			resp, _ := protocol.NewRequest(protocol.MsgWorktreeExists, msg.ID, payload)
-			cc.conn.Send(resp)
+			resp, err := protocol.NewRequest(protocol.MsgWorktreeExists, msg.ID, payload)
+			if err != nil {
+				log.Printf("error creating worktree-exists response: %v", err)
+				return
+			}
+			_ = cc.conn.Send(resp)
 			return
 		}
 		resp, _ := protocol.NewError(msg.ID, err.Error())
@@ -473,10 +477,13 @@ func (d *Daemon) handleSessionAttach(cc *clientConn, msg protocol.Message) {
 
 	go func() {
 		for data := range ch {
-			outMsg, _ := protocol.NewRequest(protocol.MsgSessionOutput, "", protocol.SessionOutputPayload{
+			outMsg, err := protocol.NewRequest(protocol.MsgSessionOutput, "", protocol.SessionOutputPayload{
 				SessionID: payload.SessionID,
 				Data:      string(data),
 			})
+			if err != nil {
+				continue
+			}
 			if err := cc.conn.Send(outMsg); err != nil {
 				cancel()
 				return

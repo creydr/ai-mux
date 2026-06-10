@@ -16,7 +16,10 @@ import (
 
 func fetchItemsCmd(conn protocol.Conn, limit int) tea.Cmd {
 	return func() tea.Msg {
-		issueMsg, _ := protocol.NewRequest(protocol.MsgListIssues, "dash-issues", protocol.ListPayload{Limit: limit})
+		issueMsg, err := protocol.NewRequest(protocol.MsgListIssues, "dash-issues", protocol.ListPayload{Limit: limit})
+		if err != nil {
+			return tui.ErrMsg{Err: fmt.Errorf("creating request: %w", err)}
+		}
 		if err := conn.Send(issueMsg); err != nil {
 			return tui.ErrMsg{Err: err}
 		}
@@ -33,7 +36,10 @@ func fetchItemsCmd(conn protocol.Conn, limit int) tea.Cmd {
 			return tui.ErrMsg{Err: fmt.Errorf("parsing issue items: %w", err)}
 		}
 
-		prMsg, _ := protocol.NewRequest(protocol.MsgListPRs, "dash-prs", protocol.ListPayload{Limit: limit})
+		prMsg, err := protocol.NewRequest(protocol.MsgListPRs, "dash-prs", protocol.ListPayload{Limit: limit})
+		if err != nil {
+			return tui.ErrMsg{Err: fmt.Errorf("creating request: %w", err)}
+		}
 		if err := conn.Send(prMsg); err != nil {
 			return tui.ErrMsg{Err: err}
 		}
@@ -66,7 +72,10 @@ func expandRepoCmd(conn protocol.Conn, repo string, itemType provider.ItemType, 
 			msgType = protocol.MsgListPRs
 		}
 
-		req, _ := protocol.NewRequest(msgType, "dash-expand", protocol.ListPayload{Repo: repo, Limit: limit})
+		req, err := protocol.NewRequest(msgType, "dash-expand", protocol.ListPayload{Repo: repo, Limit: limit})
+		if err != nil {
+			return tui.ErrMsg{Err: fmt.Errorf("creating request: %w", err)}
+		}
 		if err := conn.Send(req); err != nil {
 			return tui.ErrMsg{Err: err}
 		}
@@ -120,7 +129,10 @@ func openBrowserCmd(url string) tea.Cmd {
 
 func fetchSessionsCmd(conn protocol.Conn) tea.Cmd {
 	return func() tea.Msg {
-		req, _ := protocol.NewRequest(protocol.MsgSessionList, "dash-sessions", nil)
+		req, err := protocol.NewRequest(protocol.MsgSessionList, "dash-sessions", nil)
+		if err != nil {
+			return tui.ErrMsg{Err: fmt.Errorf("creating request: %w", err)}
+		}
 		if err := conn.Send(req); err != nil {
 			return tui.ErrMsg{Err: err}
 		}
@@ -141,13 +153,16 @@ func fetchSessionsCmd(conn protocol.Conn) tea.Cmd {
 
 func spawnSessionCmd(conn protocol.Conn, repo string, number int, itemType, agent, worktreeAction string) tea.Cmd {
 	return func() tea.Msg {
-		req, _ := protocol.NewRequest(protocol.MsgSessionSpawn, "dash-spawn", protocol.SessionSpawnPayload{
+		req, err := protocol.NewRequest(protocol.MsgSessionSpawn, "dash-spawn", protocol.SessionSpawnPayload{
 			Repo:           repo,
 			Number:         number,
 			ItemType:       itemType,
 			Agent:          agent,
 			WorktreeAction: worktreeAction,
 		})
+		if err != nil {
+			return tui.ErrMsg{Err: fmt.Errorf("creating request: %w", err)}
+		}
 		if err := conn.Send(req); err != nil {
 			return tui.ErrMsg{Err: err}
 		}
@@ -175,9 +190,12 @@ func spawnSessionCmd(conn protocol.Conn, repo string, number int, itemType, agen
 
 func stopSessionCmd(conn protocol.Conn, sessionID string) tea.Cmd {
 	return func() tea.Msg {
-		req, _ := protocol.NewRequest(protocol.MsgSessionStop, "dash-stop", protocol.SessionIDPayload{
+		req, err := protocol.NewRequest(protocol.MsgSessionStop, "dash-stop", protocol.SessionIDPayload{
 			SessionID: sessionID,
 		})
+		if err != nil {
+			return tui.ErrMsg{Err: fmt.Errorf("creating request: %w", err)}
+		}
 		if err := conn.Send(req); err != nil {
 			return tui.ErrMsg{Err: err}
 		}
@@ -198,9 +216,12 @@ func stopSessionCmd(conn protocol.Conn, sessionID string) tea.Cmd {
 
 func attachSessionCmd(conn protocol.Conn, sessionID string) tea.Cmd {
 	return func() tea.Msg {
-		req, _ := protocol.NewRequest(protocol.MsgSessionAttach, "dash-attach", protocol.SessionIDPayload{
+		req, err := protocol.NewRequest(protocol.MsgSessionAttach, "dash-attach", protocol.SessionIDPayload{
 			SessionID: sessionID,
 		})
+		if err != nil {
+			return tui.ErrMsg{Err: fmt.Errorf("creating request: %w", err)}
+		}
 		if err := conn.Send(req); err != nil {
 			return tui.ErrMsg{Err: err}
 		}
@@ -240,18 +261,24 @@ func tmuxAttachCmd(sessionID, sessionName string) tea.Cmd {
 
 func detachSessionCmd(conn protocol.Conn) tea.Cmd {
 	return func() tea.Msg {
-		req, _ := protocol.NewRequest(protocol.MsgSessionDetach, "dash-detach", nil)
-		conn.Send(req)
+		req, err := protocol.NewRequest(protocol.MsgSessionDetach, "dash-detach", nil)
+		if err != nil {
+			return tui.ErrMsg{Err: fmt.Errorf("creating request: %w", err)}
+		}
+		_ = conn.Send(req)
 		return nil
 	}
 }
 
 func renameSessionCmd(conn protocol.Conn, sessionID, name string) tea.Cmd {
 	return func() tea.Msg {
-		req, _ := protocol.NewRequest(protocol.MsgSessionRename, "dash-rename", protocol.SessionRenamePayload{
+		req, err := protocol.NewRequest(protocol.MsgSessionRename, "dash-rename", protocol.SessionRenamePayload{
 			SessionID: sessionID,
 			Name:      name,
 		})
+		if err != nil {
+			return statusMsg{text: "Error: " + err.Error()}
+		}
 		if err := conn.Send(req); err != nil {
 			return statusMsg{text: "Error: " + err.Error()}
 		}

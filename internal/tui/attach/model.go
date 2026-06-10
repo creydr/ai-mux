@@ -262,7 +262,10 @@ func (m Model) handleSessionPickerKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) 
 
 func fetchItemSessionsCmd(conn protocol.Conn, ref Ref) tea.Cmd {
 	return func() tea.Msg {
-		req, _ := protocol.NewRequest(protocol.MsgSessionList, "attach-sessions", nil)
+		req, err := protocol.NewRequest(protocol.MsgSessionList, "attach-sessions", nil)
+		if err != nil {
+			return statusTextMsg{text: "Failed to create request"}
+		}
 		if err := conn.Send(req); err != nil {
 			return statusTextMsg{text: "Failed to fetch sessions"}
 		}

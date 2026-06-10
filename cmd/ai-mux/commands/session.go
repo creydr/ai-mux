@@ -57,7 +57,10 @@ func runSessionList(cmd *cobra.Command, args []string) error {
 	}
 	defer conn.Close()
 
-	req, _ := protocol.NewRequest(protocol.MsgSessionList, "cli-sessions", nil)
+	req, err := protocol.NewRequest(protocol.MsgSessionList, "cli-sessions", nil)
+	if err != nil {
+		return fmt.Errorf("creating request: %w", err)
+	}
 	if err := conn.Send(req); err != nil {
 		return fmt.Errorf("sending request: %w", err)
 	}
@@ -107,7 +110,10 @@ func runSessionAttach(cmd *cobra.Command, args []string) error {
 	}
 	defer conn.Close()
 
-	req, _ := protocol.NewRequest(protocol.MsgSessionList, "cli-find", nil)
+	req, err := protocol.NewRequest(protocol.MsgSessionList, "cli-find", nil)
+	if err != nil {
+		return fmt.Errorf("creating request: %w", err)
+	}
 	if err := conn.Send(req); err != nil {
 		return fmt.Errorf("sending request: %w", err)
 	}
@@ -173,10 +179,13 @@ func runSessionRename(cmd *cobra.Command, args []string) error {
 	}
 	defer conn.Close()
 
-	req, _ := protocol.NewRequest(protocol.MsgSessionRename, "cli-rename", protocol.SessionRenamePayload{
+	req, err := protocol.NewRequest(protocol.MsgSessionRename, "cli-rename", protocol.SessionRenamePayload{
 		SessionID: sessionID,
 		Name:      name,
 	})
+	if err != nil {
+		return fmt.Errorf("creating request: %w", err)
+	}
 	if err := conn.Send(req); err != nil {
 		return fmt.Errorf("sending request: %w", err)
 	}
@@ -197,9 +206,12 @@ func runSessionRename(cmd *cobra.Command, args []string) error {
 }
 
 func streamOutput(conn protocol.Conn, sessionID string) error {
-	req, _ := protocol.NewRequest(protocol.MsgSessionAttach, "cli-attach", protocol.SessionIDPayload{
+	req, err := protocol.NewRequest(protocol.MsgSessionAttach, "cli-attach", protocol.SessionIDPayload{
 		SessionID: sessionID,
 	})
+	if err != nil {
+		return fmt.Errorf("creating request: %w", err)
+	}
 	if err := conn.Send(req); err != nil {
 		return fmt.Errorf("sending attach request: %w", err)
 	}
