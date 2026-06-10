@@ -39,6 +39,8 @@ func buildVisibleRows(items []provider.Item, itemsPerRepo int, expanded map[stri
 			} else if !fullLoaded[g.repo] {
 				showExpand = true
 			}
+		} else if !fullLoaded[g.repo] {
+			showExpand = true
 		}
 		if showExpand {
 			rows = append(rows, visibleRow{expandRepo: g.repo})
