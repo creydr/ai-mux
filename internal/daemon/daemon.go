@@ -201,6 +201,12 @@ func (d *Daemon) handleClient(ctx context.Context, cc *clientConn) {
 	}
 }
 
+func (cc *clientConn) send(msg protocol.Message) {
+	if err := cc.conn.Send(msg); err != nil {
+		log.Printf("send to %s failed: %v", cc.id, err)
+	}
+}
+
 func (d *Daemon) handleMessage(cc *clientConn, msg protocol.Message) {
 	switch msg.Type {
 	case protocol.MsgSubscribe:
@@ -231,7 +237,7 @@ func (d *Daemon) handleMessage(cc *clientConn, msg protocol.Message) {
 		d.handleSessionRename(cc, msg)
 	default:
 		resp, _ := protocol.NewError(msg.ID, fmt.Sprintf("unknown message type: %s", msg.Type))
-		cc.conn.Send(resp)
+		cc.send(resp)
 	}
 }
 
@@ -256,14 +262,14 @@ func (d *Daemon) handleSubscribe(cc *clientConn, msg protocol.Message) {
 	}()
 
 	resp, _ := protocol.NewResponse(msg.ID, map[string]string{"status": "subscribed"})
-	cc.conn.Send(resp)
+	cc.send(resp)
 }
 
 func (d *Daemon) handleListItems(cc *clientConn, msg protocol.Message, itemType provider.ItemType) {
 	payload, err := protocol.ParsePayload[protocol.ListPayload](msg)
 	if err != nil {
 		resp, _ := protocol.NewError(msg.ID, err.Error())
-		cc.conn.Send(resp)
+		cc.send(resp)
 		return
 	}
 
@@ -307,51 +313,51 @@ func (d *Daemon) handleListItems(cc *clientConn, msg protocol.Message, itemType 
 
 	itemsJSON, _ := json.Marshal(allItems)
 	resp, _ := protocol.NewResponse(msg.ID, protocol.ItemsPayload{Items: itemsJSON})
-	cc.conn.Send(resp)
+	cc.send(resp)
 }
 
 func (d *Daemon) handleGetItem(cc *clientConn, msg protocol.Message) {
 	payload, err := protocol.ParsePayload[protocol.GetItemPayload](msg)
 	if err != nil {
 		resp, _ := protocol.NewError(msg.ID, err.Error())
-		cc.conn.Send(resp)
+		cc.send(resp)
 		return
 	}
 
 	ref, err := provider.ParseRepoRef(payload.Repo)
 	if err != nil {
 		resp, _ := protocol.NewError(msg.ID, err.Error())
-		cc.conn.Send(resp)
+		cc.send(resp)
 		return
 	}
 
 	item, err := d.provider.GetItem(d.ctx, ref, provider.ItemType(payload.Type), payload.Number)
 	if err != nil {
 		resp, _ := protocol.NewError(msg.ID, err.Error())
-		cc.conn.Send(resp)
+		cc.send(resp)
 		return
 	}
 
 	resp, _ := protocol.NewResponse(msg.ID, item)
-	cc.conn.Send(resp)
+	cc.send(resp)
 }
 
 func (d *Daemon) handleMarkRead(cc *clientConn, msg protocol.Message) {
 	payload, err := protocol.ParsePayload[protocol.MarkReadPayload](msg)
 	if err != nil {
 		resp, _ := protocol.NewError(msg.ID, err.Error())
-		cc.conn.Send(resp)
+		cc.send(resp)
 		return
 	}
 
 	if err := d.store.MarkRead(payload.ItemID); err != nil {
 		resp, _ := protocol.NewError(msg.ID, err.Error())
-		cc.conn.Send(resp)
+		cc.send(resp)
 		return
 	}
 
 	resp, _ := protocol.NewResponse(msg.ID, map[string]string{"status": "ok"})
-	cc.conn.Send(resp)
+	cc.send(resp)
 }
 
 func (d *Daemon) handleGetStatus(cc *clientConn, msg protocol.Message) {
@@ -370,20 +376,20 @@ func (d *Daemon) handleGetStatus(cc *clientConn, msg protocol.Message) {
 		Clients: clientCount,
 		Uptime:  time.Since(d.startTime).Truncate(time.Second).String(),
 	})
-	cc.conn.Send(resp)
+	cc.send(resp)
 }
 
 func (d *Daemon) handleSessionSpawn(cc *clientConn, msg protocol.Message) {
 	if d.sessionMgr == nil {
 		resp, _ := protocol.NewError(msg.ID, "no agents configured")
-		cc.conn.Send(resp)
+		cc.send(resp)
 		return
 	}
 
 	payload, err := protocol.ParsePayload[protocol.SessionSpawnPayload](msg)
 	if err != nil {
 		resp, _ := protocol.NewError(msg.ID, err.Error())
-		cc.conn.Send(resp)
+		cc.send(resp)
 		return
 	}
 
@@ -396,22 +402,22 @@ func (d *Daemon) handleSessionSpawn(cc *clientConn, msg protocol.Message) {
 				log.Printf("error creating worktree-exists response: %v", err)
 				return
 			}
-			_ = cc.conn.Send(resp)
+			cc.send(resp)
 			return
 		}
 		resp, _ := protocol.NewError(msg.ID, err.Error())
-		cc.conn.Send(resp)
+		cc.send(resp)
 		return
 	}
 
 	resp, _ := protocol.NewResponse(msg.ID, sessionToPayload(sess))
-	cc.conn.Send(resp)
+	cc.send(resp)
 }
 
 func (d *Daemon) handleSessionList(cc *clientConn, msg protocol.Message) {
 	if d.sessionMgr == nil {
 		resp, _ := protocol.NewResponse(msg.ID, protocol.SessionListPayload{})
-		cc.conn.Send(resp)
+		cc.send(resp)
 		return
 	}
 
@@ -422,51 +428,51 @@ func (d *Daemon) handleSessionList(cc *clientConn, msg protocol.Message) {
 	}
 
 	resp, _ := protocol.NewResponse(msg.ID, protocol.SessionListPayload{Sessions: payloads})
-	cc.conn.Send(resp)
+	cc.send(resp)
 }
 
 func (d *Daemon) handleSessionStop(cc *clientConn, msg protocol.Message) {
 	if d.sessionMgr == nil {
 		resp, _ := protocol.NewError(msg.ID, "no agents configured")
-		cc.conn.Send(resp)
+		cc.send(resp)
 		return
 	}
 
 	payload, err := protocol.ParsePayload[protocol.SessionIDPayload](msg)
 	if err != nil {
 		resp, _ := protocol.NewError(msg.ID, err.Error())
-		cc.conn.Send(resp)
+		cc.send(resp)
 		return
 	}
 
 	if err := d.sessionMgr.Stop(payload.SessionID); err != nil {
 		resp, _ := protocol.NewError(msg.ID, err.Error())
-		cc.conn.Send(resp)
+		cc.send(resp)
 		return
 	}
 
 	resp, _ := protocol.NewResponse(msg.ID, map[string]string{"status": "stopped"})
-	cc.conn.Send(resp)
+	cc.send(resp)
 }
 
 func (d *Daemon) handleSessionAttach(cc *clientConn, msg protocol.Message) {
 	if d.sessionMgr == nil {
 		resp, _ := protocol.NewError(msg.ID, "no agents configured")
-		cc.conn.Send(resp)
+		cc.send(resp)
 		return
 	}
 
 	payload, err := protocol.ParsePayload[protocol.SessionIDPayload](msg)
 	if err != nil {
 		resp, _ := protocol.NewError(msg.ID, err.Error())
-		cc.conn.Send(resp)
+		cc.send(resp)
 		return
 	}
 
 	ch, cancel, err := d.sessionMgr.AttachOutput(payload.SessionID)
 	if err != nil {
 		resp, _ := protocol.NewError(msg.ID, err.Error())
-		cc.conn.Send(resp)
+		cc.send(resp)
 		return
 	}
 
@@ -492,7 +498,7 @@ func (d *Daemon) handleSessionAttach(cc *clientConn, msg protocol.Message) {
 	}()
 
 	resp, _ := protocol.NewResponse(msg.ID, map[string]string{"status": "attached"})
-	cc.conn.Send(resp)
+	cc.send(resp)
 }
 
 func (d *Daemon) handleSessionDetach(cc *clientConn, msg protocol.Message) {
@@ -502,55 +508,55 @@ func (d *Daemon) handleSessionDetach(cc *clientConn, msg protocol.Message) {
 	}
 
 	resp, _ := protocol.NewResponse(msg.ID, map[string]string{"status": "detached"})
-	cc.conn.Send(resp)
+	cc.send(resp)
 }
 
 func (d *Daemon) handleSessionInput(cc *clientConn, msg protocol.Message) {
 	if d.sessionMgr == nil {
 		resp, _ := protocol.NewError(msg.ID, "no agents configured")
-		cc.conn.Send(resp)
+		cc.send(resp)
 		return
 	}
 
 	payload, err := protocol.ParsePayload[protocol.SessionInputPayload](msg)
 	if err != nil {
 		resp, _ := protocol.NewError(msg.ID, err.Error())
-		cc.conn.Send(resp)
+		cc.send(resp)
 		return
 	}
 
 	if err := d.sessionMgr.SendInput(payload.SessionID, payload.Input); err != nil {
 		resp, _ := protocol.NewError(msg.ID, err.Error())
-		cc.conn.Send(resp)
+		cc.send(resp)
 		return
 	}
 
 	resp, _ := protocol.NewResponse(msg.ID, map[string]string{"status": "sent"})
-	cc.conn.Send(resp)
+	cc.send(resp)
 }
 
 func (d *Daemon) handleSessionRename(cc *clientConn, msg protocol.Message) {
 	if d.sessionMgr == nil {
 		resp, _ := protocol.NewError(msg.ID, "no agents configured")
-		cc.conn.Send(resp)
+		cc.send(resp)
 		return
 	}
 
 	payload, err := protocol.ParsePayload[protocol.SessionRenamePayload](msg)
 	if err != nil {
 		resp, _ := protocol.NewError(msg.ID, err.Error())
-		cc.conn.Send(resp)
+		cc.send(resp)
 		return
 	}
 
 	if err := d.sessionMgr.Rename(payload.SessionID, payload.Name); err != nil {
 		resp, _ := protocol.NewError(msg.ID, err.Error())
-		cc.conn.Send(resp)
+		cc.send(resp)
 		return
 	}
 
 	resp, _ := protocol.NewResponse(msg.ID, map[string]string{"status": "renamed"})
-	cc.conn.Send(resp)
+	cc.send(resp)
 }
 
 func sessionToPayload(s *session.Session) protocol.SessionPayload {
