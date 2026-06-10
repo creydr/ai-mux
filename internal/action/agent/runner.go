@@ -6,6 +6,10 @@ import (
 	"github.com/creydr/ai-mux/internal/config"
 )
 
+func shellQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", "'\\''") + "'"
+}
+
 type Runner struct {
 	agents map[string]config.AgentConfig
 }
@@ -26,9 +30,13 @@ func (r *Runner) HasAgent(name string) bool {
 func (r *Runner) GetCommand(agentName string) string {
 	if a, ok := r.agents[agentName]; ok {
 		if len(a.Args) == 0 {
-			return a.Command
+			return shellQuote(a.Command)
 		}
-		return a.Command + " " + strings.Join(a.Args, " ")
+		quoted := make([]string, len(a.Args))
+		for i, arg := range a.Args {
+			quoted[i] = shellQuote(arg)
+		}
+		return shellQuote(a.Command) + " " + strings.Join(quoted, " ")
 	}
-	return agentName
+	return shellQuote(agentName)
 }
