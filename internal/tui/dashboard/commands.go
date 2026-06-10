@@ -110,8 +110,10 @@ func listenEventsCmd(conn protocol.Conn) tea.Cmd {
 
 func openBrowserCmd(url string) tea.Cmd {
 	return func() tea.Msg {
-		browser.OpenCommand(url).Run()
-		return nil
+		if err := browser.OpenCommand(url).Run(); err != nil {
+			return statusMsg{text: "Failed to open browser"}
+		}
+		return statusMsg{text: "Opened in browser"}
 	}
 }
 
@@ -220,13 +222,13 @@ func tmuxAttachCmd(sessionID, sessionName string) tea.Cmd {
 	tmuxName := "ai-mux-" + sessionID
 	exe, _ := os.Executable()
 
-	exec.Command("tmux", "set-option", "-t", tmuxName, "status-right",
+	_ = exec.Command("tmux", "set-option", "-t", tmuxName, "status-right",
 		" ctrl-b d: detach | ctrl-b n: rename ").Run()
 
 	renameTemplate := fmt.Sprintf(
 		`run-shell '%s session rename %s "%%%%" >/dev/null 2>&1 && tmux display-message "Session renamed" || tmux display-message "Rename failed"'`,
 		exe, sessionID)
-	exec.Command("tmux", "bind-key", "-T", "prefix", "n",
+	_ = exec.Command("tmux", "bind-key", "-T", "prefix", "n",
 		"command-prompt", "-I", sessionName, "-p", "Session name:", renameTemplate).Run()
 
 	c := exec.Command("tmux", "attach-session", "-t", tmuxName)

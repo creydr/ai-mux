@@ -30,7 +30,7 @@ func (t *tmuxCLI) NewSession(name, workdir, command string) error {
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("tmux new-session: %s: %w", strings.TrimSpace(string(out)), err)
 	}
-	exec.Command("tmux", "set-option", "-t", name, "remain-on-exit", "on").Run()
+	_ = exec.Command("tmux", "set-option", "-t", name, "remain-on-exit", "on").Run()
 	return nil
 }
 

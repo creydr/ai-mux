@@ -286,7 +286,9 @@ func fetchItemSessionsCmd(conn protocol.Conn, ref Ref) tea.Cmd {
 
 func openBrowserCmd(url string) tea.Cmd {
 	return func() tea.Msg {
-		browser.OpenCommand(url).Run()
-		return nil
+		if err := browser.OpenCommand(url).Run(); err != nil {
+			return statusTextMsg{text: "Failed to open browser"}
+		}
+		return statusTextMsg{text: "Opened in browser"}
 	}
 }
