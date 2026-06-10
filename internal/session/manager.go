@@ -50,6 +50,7 @@ type OutputSubscription struct {
 type Manager struct {
 	mu          sync.RWMutex
 	sessions    map[string]*Session
+	monitors    map[string]context.CancelFunc
 	tmux        TmuxExecutor
 	runner      CommandBuilder
 	worktrees   WorktreeCreator
@@ -94,6 +95,7 @@ func NewManager(cfg ManagerConfig) *Manager {
 
 	m := &Manager{
 		sessions:    make(map[string]*Session),
+		monitors:    make(map[string]context.CancelFunc),
 		tmux:        NewTmuxCLI(),
 		runner:      runner,
 		worktrees:   wm,
@@ -135,9 +137,28 @@ func (m *Manager) SetRunner(r CommandBuilder) {
 	m.runner = r
 }
 
+// startMonitor spawns a monitor goroutine for the session if one is not
+// already running. The caller MUST hold m.mu.
+func (m *Manager) startMonitor(sess *Session) {
+	if _, exists := m.monitors[sess.ID]; exists {
+		return // already monitored
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	m.monitors[sess.ID] = cancel
+	go m.monitorSession(ctx, sess)
+}
+
+// stopMonitor cancels a running monitor goroutine for the given session ID.
+// The caller MUST hold m.mu.
+func (m *Manager) stopMonitor(sessionID string) {
+	if cancel, ok := m.monitors[sessionID]; ok {
+		cancel()
+		delete(m.monitors, sessionID)
+	}
+}
+
 func (m *Manager) Spawn(itemRepo string, itemNumber int, itemType string, agentName string, wtAction WorktreeAction) (*Session, error) {
 	m.mu.Lock()
-	defer m.mu.Unlock()
 
 	active := 0
 	for _, s := range m.sessions {
@@ -146,15 +167,18 @@ func (m *Manager) Spawn(itemRepo string, itemNumber int, itemType string, agentN
 		}
 	}
 	if active >= m.maxParallel {
+		m.mu.Unlock()
 		return nil, fmt.Errorf("max parallel sessions reached (%d)", m.maxParallel)
 	}
 
 	if !m.runner.HasAgent(agentName) {
+		m.mu.Unlock()
 		return nil, fmt.Errorf("agent %q not configured", agentName)
 	}
 
 	repo, ok := m.repos[itemRepo]
 	if !ok {
+		m.mu.Unlock()
 		return nil, fmt.Errorf("repo %q not configured", itemRepo)
 	}
 
@@ -179,6 +203,7 @@ func (m *Manager) Spawn(itemRepo string, itemNumber int, itemType string, agentN
 	wtName := fmt.Sprintf("%s-%s-%d", itemType, sanitizeBranchName(agentName), itemNumber)
 	wtPath, err := m.resolveWorktree(repo.Path, wtName, itemRepo, itemNumber, itemType, wtAction)
 	if err != nil {
+		m.mu.Unlock()
 		return nil, err
 	}
 	sess.Worktree = wtPath
@@ -188,11 +213,13 @@ func (m *Manager) Spawn(itemRepo string, itemNumber int, itemType string, agentN
 	sessOutputDir := filepath.Join(m.outputDir, id)
 	if err := os.MkdirAll(sessOutputDir, 0755); err != nil {
 		m.worktrees.Remove(repo.Path, wtPath)
+		m.mu.Unlock()
 		return nil, fmt.Errorf("creating session output dir: %w", err)
 	}
 
 	if err := m.tmux.NewSession(sess.TmuxSession, wtPath, cmdStr); err != nil {
 		m.worktrees.Remove(repo.Path, wtPath)
+		m.mu.Unlock()
 		return nil, fmt.Errorf("starting tmux session: %w", err)
 	}
 
@@ -200,13 +227,16 @@ func (m *Manager) Spawn(itemRepo string, itemNumber int, itemType string, agentN
 	if err := m.tmux.PipePaneToFile(sess.TmuxSession, outputLog); err != nil {
 		m.tmux.KillSession(sess.TmuxSession)
 		m.worktrees.Remove(repo.Path, wtPath)
+		m.mu.Unlock()
 		return nil, fmt.Errorf("setting up output capture: %w", err)
 	}
 
 	sess.Status = StatusRunning
 	m.sessions[id] = sess
 
-	go m.monitorSession(sess)
+	m.startMonitor(sess)
+
+	m.mu.Unlock()
 
 	m.notifyStatus(sess)
 	return sess, nil
@@ -285,6 +315,7 @@ func (m *Manager) Stop(sessionID string) error {
 		m.mu.Unlock()
 		return fmt.Errorf("session %q is not active", sessionID)
 	}
+	m.stopMonitor(sessionID)
 	m.mu.Unlock()
 
 	m.tmux.SendKeys(sess.TmuxSession, "C-c")
@@ -404,14 +435,13 @@ func (m *Manager) Reconcile() error {
 	}
 
 	m.mu.Lock()
-	defer m.mu.Unlock()
 
 	for id, sess := range m.sessions {
 		if !sess.IsActive() {
 			continue
 		}
 		if live[id] {
-			go m.monitorSession(sess)
+			m.startMonitor(sess)
 			delete(live, id)
 		} else {
 			now := time.Now()
@@ -429,8 +459,10 @@ func (m *Manager) Reconcile() error {
 			CreatedAt:   time.Now(),
 		}
 		m.sessions[id] = sess
-		go m.monitorSession(sess)
+		m.startMonitor(sess)
 	}
+
+	m.mu.Unlock()
 
 	m.persist()
 	return nil
@@ -438,13 +470,15 @@ func (m *Manager) Reconcile() error {
 
 func (m *Manager) Rename(sessionID, name string) error {
 	m.mu.Lock()
-	defer m.mu.Unlock()
 
 	sess, ok := m.sessions[sessionID]
 	if !ok {
+		m.mu.Unlock()
 		return fmt.Errorf("session %q not found", sessionID)
 	}
 	sess.Name = name
+	m.mu.Unlock()
+
 	m.persist()
 	return nil
 }
@@ -462,11 +496,17 @@ func (m *Manager) FindByItem(repo string, number int) *Session {
 	return nil
 }
 
-func (m *Manager) monitorSession(sess *Session) {
+func (m *Manager) monitorSession(ctx context.Context, sess *Session) {
 	ticker := time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
 
-	for range ticker.C {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
+
 		m.mu.RLock()
 		if !sess.IsActive() {
 			m.mu.RUnlock()
@@ -497,19 +537,22 @@ func (m *Manager) monitorSession(sess *Session) {
 				sess.Status = StatusCompleted
 			}
 			delete(m.sessions, sessID)
+			delete(m.monitors, sessID)
 			m.mu.Unlock()
+
 			m.notifyStatus(sess)
 			return
 		}
 
 		waitingInput := m.checkWaitingInput(tmuxName)
 		m.mu.Lock()
-		if sess.WaitingInput != waitingInput {
+		changed := sess.WaitingInput != waitingInput
+		if changed {
 			sess.WaitingInput = waitingInput
-			m.mu.Unlock()
+		}
+		m.mu.Unlock()
+		if changed {
 			m.notifyStatus(sess)
-		} else {
-			m.mu.Unlock()
 		}
 	}
 }
@@ -554,11 +597,20 @@ func (m *Manager) notifyStatus(sess *Session) {
 	}
 }
 
+// persist snapshots the sessions map under a read lock and saves to the store.
+// Must NOT be called while m.mu is held.
 func (m *Manager) persist() {
 	if m.store == nil {
 		return
 	}
-	m.store.Save(m.sessions)
+	m.mu.RLock()
+	snapshot := make(map[string]*Session, len(m.sessions))
+	for k, v := range m.sessions {
+		cp := *v
+		snapshot[k] = &cp
+	}
+	m.mu.RUnlock()
+	m.store.Save(snapshot)
 }
 
 func (m *Manager) saveFinalScreen(tmuxName, sessionID string) {
