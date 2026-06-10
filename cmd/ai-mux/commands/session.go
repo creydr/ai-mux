@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"os/signal"
 	"strings"
 	"syscall"
 	"text/tabwriter"
@@ -197,18 +198,41 @@ func streamOutput(conn protocol.Conn, sessionID string) error {
 		return fmt.Errorf("attach failed")
 	}
 
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
+	defer signal.Stop(sigCh)
+
+	msgCh := make(chan *protocol.Message)
+	errCh := make(chan error, 1)
+	go func() {
+		for {
+			msg, err := conn.Receive()
+			if err != nil {
+				errCh <- err
+				return
+			}
+			msgCh <- &msg
+		}
+	}()
+
 	for {
-		msg, err := conn.Receive()
-		if err != nil {
+		select {
+		case <-sigCh:
 			return nil
+		case <-errCh:
+			return nil
+		case msg := <-msgCh:
+			if msg.Type == protocol.MsgSessionDetach {
+				return nil
+			}
+			if msg.Type != protocol.MsgSessionOutput {
+				continue
+			}
+			var out protocol.SessionOutputPayload
+			if err := json.Unmarshal(msg.Payload, &out); err != nil {
+				continue
+			}
+			fmt.Print(out.Data)
 		}
-		if msg.Type != protocol.MsgSessionOutput {
-			continue
-		}
-		var out protocol.SessionOutputPayload
-		if err := json.Unmarshal(msg.Payload, &out); err != nil {
-			continue
-		}
-		fmt.Print(out.Data)
 	}
 }
