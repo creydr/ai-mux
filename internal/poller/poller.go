@@ -109,11 +109,13 @@ func (p *Poller) processItems(items []provider.Item, newType, updatedType event.
 				Item:      &itemCopy,
 				Timestamp: time.Now(),
 			})
-			p.store.SetItemState(store.ItemState{
+			if err := p.store.SetItemState(store.ItemState{
 				ItemID:     item.ID,
 				Read:       false,
 				LastSeenAt: item.UpdatedAt,
-			})
+			}); err != nil {
+				log.Printf("error saving item state for %s: %v", item.ID, err)
+			}
 		} else if item.UpdatedAt.After(existing.LastSeenAt) {
 			p.bus.Publish(event.Event{
 				Type:      updatedType,
@@ -121,7 +123,9 @@ func (p *Poller) processItems(items []provider.Item, newType, updatedType event.
 				Timestamp: time.Now(),
 			})
 			existing.LastSeenAt = item.UpdatedAt
-			p.store.SetItemState(*existing)
+			if err := p.store.SetItemState(*existing); err != nil {
+				log.Printf("error updating item state for %s: %v", item.ID, err)
+			}
 		}
 	}
 }
