@@ -88,7 +88,7 @@ func (m Model) statusBarText() string {
 	}
 	switch m.activeTab {
 	case tabSessions:
-		return "enter: attach | n: rename | s: stop | tab: switch | ctrl-c: quit"
+		return "enter: attach | n: rename | s: stop | tab: switch | ?: help"
 	default:
 		bar := "a: spawn agent"
 		if item := m.selectedItem(); item != nil {
@@ -100,7 +100,7 @@ func (m Model) statusBarText() string {
 				}
 			}
 		}
-		bar += " | b: open in browser | tab: switch | r: refresh | ctrl-c: quit"
+		bar += " | b: open in browser | tab: switch | r: refresh | ?: help"
 		return bar
 	}
 }

@@ -26,6 +26,9 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.view == viewSessionPicker {
 		return m.handleSessionPickerKey(msg)
 	}
+	if m.view == viewHelp {
+		return m.handleHelpKey(msg)
+	}
 	if m.view == viewItemDetail && m.itemDetail != nil {
 		updated, cmd := m.itemDetail.Update(msg)
 		detail := updated.(attach.Model)
@@ -253,6 +256,9 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.fullLoaded = make(map[string]bool)
 			return m, fetchItemsCmd(m.conn, m.itemsPerRepo)
 		}
+		return m, nil
+	case msg.Code == '?':
+		m.view = viewHelp
 		return m, nil
 	}
 	return m, nil

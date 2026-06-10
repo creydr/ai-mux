@@ -1470,6 +1470,82 @@ func TestModel_ExpandableRepoAtCursor(t *testing.T) {
 	}
 }
 
+func TestModel_HelpOverlay(t *testing.T) {
+	m := New(nil, 3, nil, "")
+	m.width = 80
+
+	updated, _ := m.Update(tea.KeyPressMsg{Code: '?'})
+	m = updated.(Model)
+	if m.view != viewHelp {
+		t.Fatal("? should open help overlay")
+	}
+
+	view := m.View()
+	if !containsString(view.Content, "Keyboard Shortcuts") {
+		t.Error("help view should show title")
+	}
+	if !containsString(view.Content, "Navigation") {
+		t.Error("help view should show Navigation section")
+	}
+	if !containsString(view.Content, "Spawn agent") {
+		t.Error("help view should show spawn agent binding")
+	}
+	if !containsString(view.Content, "Attached View") {
+		t.Error("help view should show Attached View section")
+	}
+
+	updated, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+	m = updated.(Model)
+	if m.view != viewOverview {
+		t.Error("Esc should close help")
+	}
+}
+
+func TestModel_HelpToggle(t *testing.T) {
+	m := New(nil, 3, nil, "")
+
+	updated, _ := m.Update(tea.KeyPressMsg{Code: '?'})
+	m = updated.(Model)
+	if m.view != viewHelp {
+		t.Fatal("? should open help")
+	}
+
+	updated, _ = m.Update(tea.KeyPressMsg{Code: '?'})
+	m = updated.(Model)
+	if m.view != viewOverview {
+		t.Error("? should toggle help off")
+	}
+}
+
+func TestModel_HelpCloseWithQ(t *testing.T) {
+	m := New(nil, 3, nil, "")
+	m.view = viewHelp
+
+	updated, _ := m.Update(tea.KeyPressMsg{Code: 'q'})
+	m = updated.(Model)
+	if m.view != viewOverview {
+		t.Error("q should close help")
+	}
+}
+
+func TestModel_StatusBarShowsHelp(t *testing.T) {
+	m := New(nil, 3, nil, "")
+	issues, _ := testItems()
+	m.issues = issues
+	m.updateRepoList()
+
+	text := m.statusBarText()
+	if !containsString(text, "?: help") {
+		t.Error("issues tab status bar should show ?: help")
+	}
+
+	m.activeTab = tabSessions
+	text = m.statusBarText()
+	if !containsString(text, "?: help") {
+		t.Error("sessions tab status bar should show ?: help")
+	}
+}
+
 func containsString(s, substr string) bool {
 	return len(s) > 0 && len(substr) > 0 && contains(s, substr)
 }

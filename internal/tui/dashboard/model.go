@@ -25,6 +25,7 @@ const (
 	viewAgentPicker
 	viewWorktreeChoice
 	viewSessionPicker
+	viewHelp
 )
 
 type spawnRequest struct {
@@ -329,6 +330,9 @@ func (m Model) View() tea.View {
 	}
 	if m.view == viewSessionPicker {
 		return m.renderSessionPicker()
+	}
+	if m.view == viewHelp {
+		return m.renderHelp()
 	}
 
 	var b strings.Builder
