@@ -122,7 +122,9 @@ func (p *Poller) processItems(items []provider.Item, newType, updatedType event.
 				Item:      &itemCopy,
 				Timestamp: time.Now(),
 			})
-			existing.LastSeenAt = item.UpdatedAt
+			// Use poll time rather than item timestamp so same-second API
+			// updates (GitHub uses second precision) are not missed.
+			existing.LastSeenAt = time.Now()
 			if err := p.store.SetItemState(*existing); err != nil {
 				log.Printf("error updating item state for %s: %v", item.ID, err)
 			}
