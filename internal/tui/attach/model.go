@@ -70,14 +70,15 @@ func (m Model) Init() tea.Cmd {
 	if m.conn == nil && m.item == nil && m.jiraItem == nil {
 		return nil
 	}
-	if m.jiraItem != nil {
-		return renderJiraContentCmd(m.jiraItem, m.jiraComments, m.width, m.err)
+	if m.jiraKey != "" && m.conn != nil {
+		cmds := []tea.Cmd{fetchJiraItemDetailCmd(m.conn, m.jiraKey)}
+		if m.jiraItem != nil {
+			cmds = append(cmds, renderJiraContentCmd(m.jiraItem, m.jiraComments, m.width, m.err))
+		}
+		return tea.Batch(cmds...)
 	}
 	if m.item != nil {
 		return renderContentCmd(m.item, m.reviews, m.comments, m.width, m.err)
-	}
-	if m.jiraKey != "" {
-		return fetchJiraItemDetailCmd(m.conn, m.jiraKey)
 	}
 	return fetchItemCmd(m.conn, m.ref)
 }
