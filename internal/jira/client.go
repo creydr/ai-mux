@@ -39,17 +39,27 @@ type acliSearchResult struct {
 	Fields acliSearchFields `json:"fields"`
 }
 
+type acliParentField struct {
+	Key    string `json:"key"`
+	Fields struct {
+		Summary string        `json:"summary"`
+		Type    acliNameField `json:"issuetype"`
+		Status  acliNameField `json:"status"`
+	} `json:"fields"`
+}
+
 type acliViewFields struct {
-	Summary     string          `json:"summary"`
-	Description json.RawMessage `json:"description"`
-	Status      acliNameField   `json:"status"`
-	Priority    acliNameField   `json:"priority"`
-	Type        acliNameField   `json:"issuetype"`
-	Assignee    *acliUserField  `json:"assignee"`
-	Reporter    *acliUserField  `json:"reporter"`
-	Labels      []string        `json:"labels"`
-	Created     string          `json:"created"`
-	Updated     string          `json:"updated"`
+	Summary     string           `json:"summary"`
+	Description json.RawMessage  `json:"description"`
+	Status      acliNameField    `json:"status"`
+	Priority    acliNameField    `json:"priority"`
+	Type        acliNameField    `json:"issuetype"`
+	Assignee    *acliUserField   `json:"assignee"`
+	Reporter    *acliUserField   `json:"reporter"`
+	Labels      []string         `json:"labels"`
+	Created     string           `json:"created"`
+	Updated     string           `json:"updated"`
+	Parent      *acliParentField `json:"parent"`
 }
 
 type acliViewResult struct {
@@ -58,15 +68,11 @@ type acliViewResult struct {
 	Fields acliViewFields `json:"fields"`
 }
 
-type acliCommentAuthor struct {
-	DisplayName string `json:"displayName"`
-}
-
 type acliComment struct {
-	ID      string            `json:"id"`
-	Author  acliCommentAuthor `json:"author"`
-	Body    json.RawMessage   `json:"body"`
-	Created string            `json:"created"`
+	ID      string `json:"id"`
+	Author  string `json:"author"`
+	Body    string `json:"body"`
+	Created string `json:"created"`
 }
 
 type acliCommentsWrapper struct {
@@ -151,6 +157,27 @@ func (c *Client) GetItem(ctx context.Context, key string) (*provider.JiraItem, e
 	if r.Fields.Reporter != nil {
 		item.Reporter = r.Fields.Reporter.DisplayName
 	}
+	if r.Fields.Parent != nil && r.Fields.Parent.Key != "" {
+		item.Parent = &provider.JiraChildItem{
+			Key:     r.Fields.Parent.Key,
+			Summary: r.Fields.Parent.Fields.Summary,
+			Type:    r.Fields.Parent.Fields.Type.Name,
+			Status:  r.Fields.Parent.Fields.Status.Name,
+		}
+	}
+
+	children, err := c.Search(ctx, "parent = "+key, "", 50)
+	if err == nil {
+		for _, child := range children {
+			item.Children = append(item.Children, provider.JiraChildItem{
+				Key:     child.Key,
+				Summary: child.Summary,
+				Type:    child.Type,
+				Status:  child.Status,
+			})
+		}
+	}
+
 	return item, nil
 }
 
@@ -172,8 +199,8 @@ func (c *Client) GetComments(ctx context.Context, key string) ([]provider.JiraCo
 	for i, r := range wrapper.Comments {
 		comments[i] = provider.JiraComment{
 			ID:        r.ID,
-			Author:    r.Author.DisplayName,
-			Body:      parseDescription(r.Body),
+			Author:    r.Author,
+			Body:      r.Body,
 			CreatedAt: parseTime(r.Created),
 		}
 	}

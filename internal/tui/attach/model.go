@@ -11,6 +11,15 @@ import (
 	"github.com/creydr/ai-mux/internal/tui"
 )
 
+type jiraDetailState struct {
+	item         *provider.JiraItem
+	comments     []provider.JiraComment
+	key          string
+	scroll       int
+	childCursor  int
+	childFocused bool
+}
+
 type Model struct {
 	conn     protocol.Conn
 	ref      Ref
@@ -27,6 +36,10 @@ type Model struct {
 	jiraKey      string
 	jiraItem     *provider.JiraItem
 	jiraComments []provider.JiraComment
+
+	childCursor  int
+	childFocused bool
+	parentStack  []jiraDetailState
 
 	renderedLines []string
 
@@ -71,11 +84,7 @@ func (m Model) Init() tea.Cmd {
 		return nil
 	}
 	if m.jiraKey != "" && m.conn != nil {
-		cmds := []tea.Cmd{fetchJiraItemDetailCmd(m.conn, m.jiraKey)}
-		if m.jiraItem != nil {
-			cmds = append(cmds, renderJiraContentCmd(m.jiraItem, m.jiraComments, m.width, m.err))
-		}
-		return tea.Batch(cmds...)
+		return fetchJiraItemDetailCmd(m.conn, m.jiraKey)
 	}
 	if m.item != nil {
 		return renderContentCmd(m.item, m.reviews, m.comments, m.width, m.err)
@@ -91,7 +100,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 		if m.jiraItem != nil {
-			return m, renderJiraContentCmd(m.jiraItem, m.jiraComments, m.width, m.err)
+			return m, renderJiraContentCmd(m.jiraItem, m.jiraComments, m.width, m.childCursor, m.childFocused, m.err)
 		}
 		return m, renderContentCmd(m.item, m.reviews, m.comments, m.width, m.err)
 	case contentRenderedMsg:
@@ -109,7 +118,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case jiraItemLoadedMsg:
 		m.jiraItem = msg.item
 		m.jiraComments = msg.comments
-		return m, renderJiraContentCmd(m.jiraItem, m.jiraComments, m.width, m.err)
+		return m, renderJiraContentCmd(m.jiraItem, m.jiraComments, m.width, m.childCursor, m.childFocused, m.err)
 	case tui.ErrMsg:
 		m.err = msg.Err
 		return m, renderContentCmd(m.item, m.reviews, m.comments, m.width, m.err)
@@ -153,7 +162,7 @@ func renderContentCmd(item *provider.Item, reviews []provider.Review, comments [
 	}
 }
 
-func renderJiraContentCmd(item *provider.JiraItem, comments []provider.JiraComment, width int, err error) tea.Cmd {
+func renderJiraContentCmd(item *provider.JiraItem, comments []provider.JiraComment, width int, childCursor int, childFocused bool, err error) tea.Cmd {
 	return func() tea.Msg {
 		var b strings.Builder
 		b.WriteString(renderJiraHeader(item))
@@ -162,6 +171,7 @@ func renderJiraContentCmd(item *provider.JiraItem, comments []provider.JiraComme
 		if len(comments) > 0 {
 			b.WriteString(renderJiraComments(comments))
 		}
+		b.WriteString(renderJiraChildren(item, childCursor, childFocused))
 		if err != nil {
 			b.WriteString(fmt.Sprintf("\n  Error: %v\n", err))
 		}
@@ -179,7 +189,21 @@ func (m Model) View() tea.View {
 		statusBar += statusStyle.Render("  " + m.statusText)
 	} else if m.embedded {
 		if m.jiraKey != "" {
-			statusBar += statusStyle.Render("  a: spawn agent | r: refresh | o: open in browser | esc: back")
+			escLabel := "esc: back"
+			if len(m.parentStack) > 0 {
+				escLabel = "esc: parent"
+			}
+			var hint string
+			if m.jiraItem != nil && len(m.jiraItem.Children) > 0 {
+				if m.childFocused {
+					hint = fmt.Sprintf("  tab: focus description | enter: open child | a: spawn agent | %s", escLabel)
+				} else {
+					hint = fmt.Sprintf("  tab: focus child issues | a: spawn agent | r: refresh | o: open in browser | %s", escLabel)
+				}
+			} else {
+				hint = fmt.Sprintf("  a: spawn agent | r: refresh | o: open in browser | %s", escLabel)
+			}
+			statusBar += statusStyle.Render(hint)
 		} else {
 			statusBar += statusStyle.Render("  a: spawn agent | t: attach to session | r: refresh | o: open in browser | esc: back")
 		}
@@ -188,8 +212,20 @@ func (m Model) View() tea.View {
 	}
 
 	if len(m.renderedLines) == 0 {
-		content := renderHeader(m.item) + "\n\n  Loading..."
-		v := tea.NewView(content + statusBar)
+		var content string
+		if m.jiraItem != nil {
+			content = renderJiraHeader(m.jiraItem) + "\n\n  Loading..."
+		} else {
+			content = renderHeader(m.item) + "\n\n  Loading..."
+		}
+		contentLines := strings.Split(content, "\n")
+		if m.height > 0 {
+			viewHeight := m.height - 2
+			for len(contentLines) < viewHeight {
+				contentLines = append(contentLines, "")
+			}
+		}
+		v := tea.NewView(strings.Join(contentLines, "\n") + statusBar)
 		v.AltScreen = true
 		return v
 	}
@@ -199,9 +235,14 @@ func (m Model) View() tea.View {
 		lines = lines[m.scroll:]
 	}
 
-	viewHeight := m.height - 2
-	if viewHeight > 0 && len(lines) > viewHeight {
-		lines = lines[:viewHeight]
+	if m.height > 0 {
+		viewHeight := m.height - 2
+		if viewHeight > 0 && len(lines) > viewHeight {
+			lines = lines[:viewHeight]
+		}
+		for len(lines) < viewHeight {
+			lines = append(lines, "")
+		}
 	}
 
 	v := tea.NewView(strings.Join(lines, "\n") + statusBar)
@@ -244,14 +285,56 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	}
 
 	switch {
+	case msg.Code == tea.KeyTab:
+		if m.jiraItem != nil && len(m.jiraItem.Children) > 0 {
+			m.childFocused = !m.childFocused
+			if m.childFocused && m.childCursor >= len(m.jiraItem.Children) {
+				m.childCursor = 0
+			}
+			return m, renderJiraContentCmd(m.jiraItem, m.jiraComments, m.width, m.childCursor, m.childFocused, m.err)
+		}
+		return m, nil
 	case msg.Code == tea.KeyDown:
+		if m.childFocused && m.jiraItem != nil {
+			if m.childCursor < len(m.jiraItem.Children)-1 {
+				m.childCursor++
+			}
+			return m, renderJiraContentCmd(m.jiraItem, m.jiraComments, m.width, m.childCursor, m.childFocused, m.err)
+		}
 		if m.scroll < m.maxScroll() {
 			m.scroll++
 		}
 		return m, nil
 	case msg.Code == tea.KeyUp:
+		if m.childFocused {
+			if m.childCursor > 0 {
+				m.childCursor--
+			}
+			return m, renderJiraContentCmd(m.jiraItem, m.jiraComments, m.width, m.childCursor, m.childFocused, m.err)
+		}
 		if m.scroll > 0 {
 			m.scroll--
+		}
+		return m, nil
+	case msg.Code == tea.KeyEnter:
+		if m.childFocused && m.jiraItem != nil && m.childCursor < len(m.jiraItem.Children) {
+			child := m.jiraItem.Children[m.childCursor]
+			m.parentStack = append(m.parentStack, jiraDetailState{
+				item:         m.jiraItem,
+				comments:     m.jiraComments,
+				key:          m.jiraKey,
+				scroll:       m.scroll,
+				childCursor:  m.childCursor,
+				childFocused: m.childFocused,
+			})
+			m.jiraKey = child.Key
+			m.jiraItem = nil
+			m.jiraComments = nil
+			m.scroll = 0
+			m.childCursor = 0
+			m.childFocused = false
+			m.renderedLines = nil
+			return m, fetchJiraItemDetailCmd(m.conn, child.Key)
 		}
 		return m, nil
 	case msg.Code == 'r':
@@ -286,6 +369,17 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case msg.Code == 'q' || msg.Code == tea.KeyEscape:
+		if len(m.parentStack) > 0 {
+			prev := m.parentStack[len(m.parentStack)-1]
+			m.parentStack = m.parentStack[:len(m.parentStack)-1]
+			m.jiraItem = prev.item
+			m.jiraComments = prev.comments
+			m.jiraKey = prev.key
+			m.scroll = prev.scroll
+			m.childCursor = prev.childCursor
+			m.childFocused = prev.childFocused
+			return m, renderJiraContentCmd(m.jiraItem, m.jiraComments, m.width, m.childCursor, m.childFocused, m.err)
+		}
 		if m.embedded {
 			return m, func() tea.Msg { return CloseMsg{} }
 		}

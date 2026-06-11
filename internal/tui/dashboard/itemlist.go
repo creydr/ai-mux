@@ -277,9 +277,10 @@ func buildJiraContentLines(items []provider.JiraItem, cursor, width int, hasMore
 	}
 
 	const keyCol = 12
+	const typeCol = 12
 	const statusCol = 16
 	const priorityCol = 10
-	fixedCols := 2 + keyCol + 2 + statusCol + 2 + priorityCol + 2
+	fixedCols := 2 + keyCol + 2 + typeCol + 2 + statusCol + 2 + priorityCol + 2
 	summaryCol := width - fixedCols
 	if summaryCol < 20 {
 		summaryCol = 20
@@ -294,6 +295,12 @@ func buildJiraContentLines(items []provider.JiraItem, cursor, width int, hasMore
 			summary = summary[:summaryCol-1] + "…"
 		}
 
+		itemType := item.Type
+		if len(itemType) > typeCol-2 {
+			itemType = itemType[:typeCol-3] + "…"
+		}
+		typeStr := fmt.Sprintf("[%s]", itemType)
+
 		status := item.Status
 		if len(status) > statusCol-2 {
 			status = status[:statusCol-3] + "…"
@@ -306,8 +313,9 @@ func buildJiraContentLines(items []provider.JiraItem, cursor, width int, hasMore
 		}
 		priorityStr := fmt.Sprintf("[%s]", priority)
 
-		text := fmt.Sprintf("  %-*s  %-*s  %-*s  %s",
+		text := fmt.Sprintf("  %-*s  %-*s  %-*s  %-*s  %s",
 			keyCol, item.Key,
+			typeCol, typeStr,
 			summaryCol, summary,
 			statusCol, statusStr,
 			priorityStr,

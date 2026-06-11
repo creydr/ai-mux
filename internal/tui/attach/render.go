@@ -119,10 +119,58 @@ func renderJiraComments(comments []provider.JiraComment) string {
 	b.WriteString(labelStyle.Render("  Comments"))
 	b.WriteString("\n")
 	for _, c := range comments {
+		date := ""
+		if !c.CreatedAt.IsZero() {
+			date = " (" + c.CreatedAt.Format("2006-01-02 15:04") + ")"
+		}
 		b.WriteString(commentStyle.Render(
-			commentAuthorStyle.Render(c.Author) + ": " + c.Body,
+			commentAuthorStyle.Render(c.Author) + date + ": " + c.Body,
 		))
 		b.WriteString("\n")
 	}
 	return b.String()
+}
+
+func renderJiraChildren(item *provider.JiraItem, childCursor int, childFocused bool) string {
+	if item == nil {
+		return ""
+	}
+	hasParent := item.Parent != nil && item.Parent.Key != ""
+	hasChildren := len(item.Children) > 0
+	if !hasParent && !hasChildren {
+		return ""
+	}
+
+	var b strings.Builder
+
+	if hasParent {
+		b.WriteString("\n")
+		b.WriteString(labelStyle.Render("  Parent"))
+		b.WriteString("\n")
+		p := item.Parent
+		b.WriteString(fmt.Sprintf("  %s - %s  [%s]\n", p.Key, p.Summary, p.Type))
+	}
+
+	if hasChildren {
+		b.WriteString("\n")
+		b.WriteString(labelStyle.Render(fmt.Sprintf("  Child Issues (%d)", len(item.Children))))
+		b.WriteString("\n")
+		for i, child := range item.Children {
+			cursor := "  "
+			if childFocused && i == childCursor {
+				cursor = "> "
+			}
+			b.WriteString(fmt.Sprintf("  %s%-12s  %-40s  [%-6s]  [%s]\n",
+				cursor, child.Key, truncate(child.Summary, 40), child.Type, child.Status))
+		}
+	}
+
+	return b.String()
+}
+
+func truncate(s string, max int) string {
+	if len(s) <= max {
+		return s
+	}
+	return s[:max-1] + "…"
 }
