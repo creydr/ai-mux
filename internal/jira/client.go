@@ -17,39 +17,60 @@ func NewClient() *Client {
 	return &Client{}
 }
 
-// acliSearchResult represents the JSON output from acli jira workitem search.
+type acliNameField struct {
+	Name string `json:"name"`
+}
+
+type acliUserField struct {
+	DisplayName string `json:"displayName"`
+}
+
+type acliSearchFields struct {
+	Summary  string         `json:"summary"`
+	Status   acliNameField  `json:"status"`
+	Priority acliNameField  `json:"priority"`
+	Type     acliNameField  `json:"issuetype"`
+	Assignee *acliUserField `json:"assignee"`
+}
+
 type acliSearchResult struct {
-	Key      string `json:"key"`
-	Summary  string `json:"summary"`
-	Status   string `json:"status"`
-	Priority string `json:"priority"`
-	Type     string `json:"issuetype"`
-	Assignee string `json:"assignee"`
-	Self     string `json:"self"`
+	Key    string           `json:"key"`
+	Self   string           `json:"self"`
+	Fields acliSearchFields `json:"fields"`
 }
 
-// acliViewResult represents the JSON output from acli jira workitem view.
+type acliViewFields struct {
+	Summary     string          `json:"summary"`
+	Description json.RawMessage `json:"description"`
+	Status      acliNameField   `json:"status"`
+	Priority    acliNameField   `json:"priority"`
+	Type        acliNameField   `json:"issuetype"`
+	Assignee    *acliUserField  `json:"assignee"`
+	Reporter    *acliUserField  `json:"reporter"`
+	Labels      []string        `json:"labels"`
+	Created     string          `json:"created"`
+	Updated     string          `json:"updated"`
+}
+
 type acliViewResult struct {
-	Key         string `json:"key"`
-	Summary     string `json:"summary"`
-	Description string `json:"description"`
-	Status      string `json:"status"`
-	Priority    string `json:"priority"`
-	Type        string `json:"issuetype"`
-	Assignee    string `json:"assignee"`
-	Reporter    string `json:"reporter"`
-	Labels      string `json:"labels"`
-	Created     string `json:"created"`
-	Updated     string `json:"updated"`
-	Self        string `json:"self"`
+	Key    string         `json:"key"`
+	Self   string         `json:"self"`
+	Fields acliViewFields `json:"fields"`
 }
 
-// acliComment represents a comment from acli jira workitem comment list.
+type acliCommentAuthor struct {
+	DisplayName string `json:"displayName"`
+}
+
 type acliComment struct {
-	ID      string `json:"id"`
-	Author  string `json:"author"`
-	Body    string `json:"body"`
-	Created string `json:"created"`
+	ID      string            `json:"id"`
+	Author  acliCommentAuthor `json:"author"`
+	Body    json.RawMessage   `json:"body"`
+	Created string            `json:"created"`
+}
+
+type acliCommentsWrapper struct {
+	Comments []acliComment `json:"comments"`
 }
 
 func (c *Client) Search(ctx context.Context, jql, orderBy string, limit int) ([]provider.JiraItem, error) {
@@ -77,17 +98,23 @@ func (c *Client) Search(ctx context.Context, jql, orderBy string, limit int) ([]
 		return nil, fmt.Errorf("parsing search results: %w", err)
 	}
 
-	items := make([]provider.JiraItem, len(results))
-	for i, r := range results {
-		items[i] = provider.JiraItem{
+	items := make([]provider.JiraItem, 0, len(results))
+	for _, r := range results {
+		if r.Key == "" {
+			continue
+		}
+		item := provider.JiraItem{
 			Key:      r.Key,
-			Summary:  r.Summary,
-			Status:   r.Status,
-			Priority: r.Priority,
-			Type:     r.Type,
-			Assignee: r.Assignee,
+			Summary:  r.Fields.Summary,
+			Status:   r.Fields.Status.Name,
+			Priority: r.Fields.Priority.Name,
+			Type:     r.Fields.Type.Name,
 			URL:      selfToURL(r.Self, r.Key),
 		}
+		if r.Fields.Assignee != nil {
+			item.Assignee = r.Fields.Assignee.DisplayName
+		}
+		items = append(items, item)
 	}
 	return items, nil
 }
@@ -106,27 +133,23 @@ func (c *Client) GetItem(ctx context.Context, key string) (*provider.JiraItem, e
 		return nil, fmt.Errorf("parsing item %s: %w", key, err)
 	}
 
-	var labels []string
-	if r.Labels != "" {
-		labels = strings.Split(r.Labels, ",")
-		for i := range labels {
-			labels[i] = strings.TrimSpace(labels[i])
-		}
-	}
-
 	item := &provider.JiraItem{
-		Key:         r.Key,
-		Summary:     r.Summary,
-		Description: r.Description,
-		Status:      r.Status,
-		Priority:    r.Priority,
-		Type:        r.Type,
-		Assignee:    r.Assignee,
-		Reporter:    r.Reporter,
-		Labels:      labels,
-		URL:         selfToURL(r.Self, r.Key),
-		CreatedAt:   parseTime(r.Created),
-		UpdatedAt:   parseTime(r.Updated),
+		Key:       r.Key,
+		Summary:   r.Fields.Summary,
+		Status:    r.Fields.Status.Name,
+		Priority:  r.Fields.Priority.Name,
+		Type:      r.Fields.Type.Name,
+		Labels:    r.Fields.Labels,
+		URL:       selfToURL(r.Self, r.Key),
+		CreatedAt: parseTime(r.Fields.Created),
+		UpdatedAt: parseTime(r.Fields.Updated),
+	}
+	item.Description = parseDescription(r.Fields.Description)
+	if r.Fields.Assignee != nil {
+		item.Assignee = r.Fields.Assignee.DisplayName
+	}
+	if r.Fields.Reporter != nil {
+		item.Reporter = r.Fields.Reporter.DisplayName
 	}
 	return item, nil
 }
@@ -140,17 +163,17 @@ func (c *Client) GetComments(ctx context.Context, key string) ([]provider.JiraCo
 		return nil, fmt.Errorf("getting comments for %s: %w", key, err)
 	}
 
-	var results []acliComment
-	if err := json.Unmarshal(out, &results); err != nil {
+	var wrapper acliCommentsWrapper
+	if err := json.Unmarshal(out, &wrapper); err != nil {
 		return nil, fmt.Errorf("parsing comments for %s: %w", key, err)
 	}
 
-	comments := make([]provider.JiraComment, len(results))
-	for i, r := range results {
+	comments := make([]provider.JiraComment, len(wrapper.Comments))
+	for i, r := range wrapper.Comments {
 		comments[i] = provider.JiraComment{
 			ID:        r.ID,
-			Author:    r.Author,
-			Body:      r.Body,
+			Author:    r.Author.DisplayName,
+			Body:      parseDescription(r.Body),
 			CreatedAt: parseTime(r.Created),
 		}
 	}
@@ -167,6 +190,51 @@ func (c *Client) run(ctx context.Context, args ...string) ([]byte, error) {
 		return nil, err
 	}
 	return out, nil
+}
+
+func parseDescription(raw json.RawMessage) string {
+	if len(raw) == 0 || string(raw) == "null" {
+		return ""
+	}
+	var s string
+	if json.Unmarshal(raw, &s) == nil {
+		return s
+	}
+	var doc adfDocument
+	if json.Unmarshal(raw, &doc) == nil {
+		return extractADFText(&doc)
+	}
+	return string(raw)
+}
+
+type adfDocument struct {
+	Content []adfNode `json:"content"`
+}
+
+type adfNode struct {
+	Type    string    `json:"type"`
+	Text    string    `json:"text"`
+	Content []adfNode `json:"content"`
+}
+
+func extractADFText(doc *adfDocument) string {
+	var b strings.Builder
+	for i, node := range doc.Content {
+		if i > 0 {
+			b.WriteString("\n")
+		}
+		extractNodeText(&b, &node)
+	}
+	return b.String()
+}
+
+func extractNodeText(b *strings.Builder, node *adfNode) {
+	if node.Text != "" {
+		b.WriteString(node.Text)
+	}
+	for _, child := range node.Content {
+		extractNodeText(b, &child)
+	}
 }
 
 func selfToURL(self, key string) string {
