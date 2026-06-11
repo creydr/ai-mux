@@ -31,11 +31,12 @@ const (
 )
 
 type spawnRequest struct {
-	repo     string
-	number   int
-	itemType string
-	agent    string
-	itemKey  string
+	repo          string
+	number        int
+	itemType      string
+	agent         string
+	itemKey       string
+	contextPrompt string
 }
 
 type panel int
@@ -301,12 +302,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.rebuildViewport()
 			return m, m.scheduleStatusClear()
 		}
-		req := &spawnRequest{repo: msg.Ref.Owner + "/" + msg.Ref.Repo, number: msg.Ref.Number, itemType: string(msg.Ref.Type)}
+		spawnItem := m.findItem(msg.Ref.Owner+"/"+msg.Ref.Repo, msg.Ref.Number)
+		cp := contextPromptForItem(spawnItem)
+		req := &spawnRequest{repo: msg.Ref.Owner + "/" + msg.Ref.Repo, number: msg.Ref.Number, itemType: string(msg.Ref.Type), contextPrompt: cp}
 		if m.defaultAgent != "" {
 			m.view = viewOverview
 			m.itemDetail = nil
 			m.rebuildViewport()
-			return m, spawnSessionCmd(m.conn, req.repo, req.number, req.itemType, m.defaultAgent, "")
+			return m, spawnSessionCmd(m.conn, req.repo, req.number, req.itemType, m.defaultAgent, "", req.contextPrompt)
 		}
 		m.pendingSpawn = req
 		m.agentCursor = 0
@@ -321,20 +324,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.rebuildViewport()
 			return m, m.scheduleStatusClear()
 		}
+		jiraItem := m.findJiraItem(msg.Key)
+		cp := contextPromptForJiraItem(jiraItem)
 		m.view = viewOverview
 		m.itemDetail = nil
 		if len(m.configuredRepos) == 1 {
-			req := &spawnRequest{repo: m.configuredRepos[0], itemType: string(provider.ItemTypeJira), itemKey: msg.Key}
+			req := &spawnRequest{repo: m.configuredRepos[0], itemType: string(provider.ItemTypeJira), itemKey: msg.Key, contextPrompt: cp}
 			if m.defaultAgent != "" {
 				m.rebuildViewport()
-				return m, spawnJiraSessionCmd(m.conn, req.repo, req.itemKey, m.defaultAgent, "")
+				return m, spawnJiraSessionCmd(m.conn, req.repo, req.itemKey, m.defaultAgent, "", req.contextPrompt)
 			}
 			m.pendingSpawn = req
 			m.agentCursor = 0
 			m.view = viewAgentPicker
 			return m, nil
 		}
-		m.pendingSpawn = &spawnRequest{itemType: string(provider.ItemTypeJira), itemKey: msg.Key}
+		m.pendingSpawn = &spawnRequest{itemType: string(provider.ItemTypeJira), itemKey: msg.Key, contextPrompt: cp}
 		m.repoPickerCursor = 0
 		m.repoPickerActive = true
 		m.view = viewRepoPicker
@@ -512,4 +517,27 @@ func (m *Model) rebuildViewport() {
 	} else if m.cursorLine >= m.viewport.YOffset()+vpHeight {
 		m.viewport.SetYOffset(m.cursorLine - vpHeight + 1)
 	}
+}
+
+func (m Model) findItem(repo string, number int) *provider.Item {
+	for i := range m.issues {
+		if m.issues[i].Repo.String() == repo && m.issues[i].Number == number {
+			return &m.issues[i]
+		}
+	}
+	for i := range m.prs {
+		if m.prs[i].Repo.String() == repo && m.prs[i].Number == number {
+			return &m.prs[i]
+		}
+	}
+	return nil
+}
+
+func (m Model) findJiraItem(key string) *provider.JiraItem {
+	for i := range m.jiraItems {
+		if m.jiraItems[i].Key == key {
+			return &m.jiraItems[i]
+		}
+	}
+	return nil
 }

@@ -1,11 +1,31 @@
 package dashboard
 
 import (
+	"fmt"
+
 	tea "charm.land/bubbletea/v2"
 	"github.com/creydr/ai-mux/internal/protocol"
 	"github.com/creydr/ai-mux/internal/provider"
 	"github.com/creydr/ai-mux/internal/tui/attach"
 )
+
+func contextPromptForItem(item *provider.Item) string {
+	if item == nil || item.URL == "" {
+		return ""
+	}
+	repo := item.Repo.String()
+	if item.Type == provider.ItemTypePR {
+		return fmt.Sprintf("You are working on GitHub PR %s. Use \"gh pr view %d --repo %s\" to inspect the PR details and provide a review.", item.URL, item.Number, repo)
+	}
+	return fmt.Sprintf("You are working on GitHub issue %s. Use \"gh issue view %d --repo %s\" to inspect the issue details and then provide a fix.", item.URL, item.Number, repo)
+}
+
+func contextPromptForJiraItem(item *provider.JiraItem) string {
+	if item == nil {
+		return ""
+	}
+	return fmt.Sprintf("You are working on Jira item %s (%s). Use \"acli jira workitem view %s\" to inspect the item details and then provide a fix.", item.Key, item.URL, item.Key)
+}
 
 func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if msg.Code == 'c' && msg.Mod.Contains(tea.ModCtrl) {
@@ -230,17 +250,18 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			if item == nil {
 				return m, nil
 			}
+			cp := contextPromptForJiraItem(item)
 			if len(m.configuredRepos) == 1 {
-				req := &spawnRequest{repo: m.configuredRepos[0], itemType: string(provider.ItemTypeJira), itemKey: item.Key}
+				req := &spawnRequest{repo: m.configuredRepos[0], itemType: string(provider.ItemTypeJira), itemKey: item.Key, contextPrompt: cp}
 				if m.defaultAgent != "" {
-					return m, spawnJiraSessionCmd(m.conn, req.repo, req.itemKey, m.defaultAgent, "")
+					return m, spawnJiraSessionCmd(m.conn, req.repo, req.itemKey, m.defaultAgent, "", req.contextPrompt)
 				}
 				m.pendingSpawn = req
 				m.agentCursor = 0
 				m.view = viewAgentPicker
 				return m, nil
 			}
-			m.pendingSpawn = &spawnRequest{itemType: string(provider.ItemTypeJira), itemKey: item.Key}
+			m.pendingSpawn = &spawnRequest{itemType: string(provider.ItemTypeJira), itemKey: item.Key, contextPrompt: cp}
 			m.repoPickerCursor = 0
 			m.repoPickerActive = true
 			m.view = viewRepoPicker
@@ -254,9 +275,10 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if m.activeTab == tabPRs {
 			itemType = string(provider.ItemTypePR)
 		}
-		req := &spawnRequest{repo: item.Repo.String(), number: item.Number, itemType: itemType}
+		cp := contextPromptForItem(item)
+		req := &spawnRequest{repo: item.Repo.String(), number: item.Number, itemType: itemType, contextPrompt: cp}
 		if m.defaultAgent != "" {
-			return m, spawnSessionCmd(m.conn, req.repo, req.number, req.itemType, m.defaultAgent, "")
+			return m, spawnSessionCmd(m.conn, req.repo, req.number, req.itemType, m.defaultAgent, "", req.contextPrompt)
 		}
 		m.pendingSpawn = req
 		m.agentCursor = 0

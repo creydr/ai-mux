@@ -34,9 +34,9 @@ func (m Model) handleAgentPickerKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.view = viewOverview
 			m.rebuildViewport()
 			if req.itemKey != "" {
-				return m, spawnJiraSessionCmd(m.conn, req.repo, req.itemKey, agent, "")
+				return m, spawnJiraSessionCmd(m.conn, req.repo, req.itemKey, agent, "", req.contextPrompt)
 			}
-			return m, spawnSessionCmd(m.conn, req.repo, req.number, req.itemType, agent, "")
+			return m, spawnSessionCmd(m.conn, req.repo, req.number, req.itemType, agent, "", req.contextPrompt)
 		}
 		return m, nil
 	}
@@ -109,9 +109,9 @@ func (m Model) handleWorktreeChoiceKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd)
 			m.view = viewOverview
 			m.rebuildViewport()
 			if req.itemKey != "" {
-				return m, spawnJiraSessionCmd(m.conn, req.repo, req.itemKey, req.agent, action)
+				return m, spawnJiraSessionCmd(m.conn, req.repo, req.itemKey, req.agent, action, req.contextPrompt)
 			}
-			return m, spawnSessionCmd(m.conn, req.repo, req.number, req.itemType, req.agent, action)
+			return m, spawnSessionCmd(m.conn, req.repo, req.number, req.itemType, req.agent, action, req.contextPrompt)
 		}
 		return m, nil
 	}
@@ -240,7 +240,7 @@ func (m Model) handleRepoPickerKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 				m.pendingSpawn = nil
 				m.view = viewOverview
 				m.rebuildViewport()
-				return m, spawnJiraSessionCmd(m.conn, req.repo, req.itemKey, m.defaultAgent, "")
+				return m, spawnJiraSessionCmd(m.conn, req.repo, req.itemKey, m.defaultAgent, "", req.contextPrompt)
 			}
 			m.agentCursor = 0
 			m.view = viewAgentPicker

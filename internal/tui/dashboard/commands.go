@@ -124,7 +124,7 @@ func fetchSessionsCmd(conn protocol.Conn) tea.Cmd {
 	}
 }
 
-func spawnSessionCmd(conn protocol.Conn, repo string, number int, itemType, agent, worktreeAction string) tea.Cmd {
+func spawnSessionCmd(conn protocol.Conn, repo string, number int, itemType, agent, worktreeAction, contextPrompt string) tea.Cmd {
 	return func() tea.Msg {
 		resp, err := protocol.SendRequest(conn, protocol.MsgSessionSpawn, "dash-spawn", protocol.SessionSpawnPayload{
 			Repo:           repo,
@@ -132,6 +132,7 @@ func spawnSessionCmd(conn protocol.Conn, repo string, number int, itemType, agen
 			ItemType:       itemType,
 			Agent:          agent,
 			WorktreeAction: worktreeAction,
+			ContextPrompt:  contextPrompt,
 		}, protocol.DefaultTimeout)
 		if err != nil {
 			return tui.ErrMsg{Err: err}
@@ -251,7 +252,7 @@ func fetchJiraItemsCmd(conn protocol.Conn, offset, limit int) tea.Cmd {
 	}
 }
 
-func spawnJiraSessionCmd(conn protocol.Conn, repo, itemKey, agent, worktreeAction string) tea.Cmd {
+func spawnJiraSessionCmd(conn protocol.Conn, repo, itemKey, agent, worktreeAction, contextPrompt string) tea.Cmd {
 	return func() tea.Msg {
 		resp, err := protocol.SendRequest(conn, protocol.MsgSessionSpawn, "dash-spawn-jira", protocol.SessionSpawnPayload{
 			Repo:           repo,
@@ -259,6 +260,7 @@ func spawnJiraSessionCmd(conn protocol.Conn, repo, itemKey, agent, worktreeActio
 			ItemKey:        itemKey,
 			Agent:          agent,
 			WorktreeAction: worktreeAction,
+			ContextPrompt:  contextPrompt,
 		}, protocol.DefaultTimeout)
 		if err != nil {
 			return tui.ErrMsg{Err: err}
@@ -274,6 +276,22 @@ func spawnJiraSessionCmd(conn protocol.Conn, repo, itemKey, agent, worktreeActio
 			return tui.ErrMsg{Err: fmt.Errorf("parsing session: %w", err)}
 		}
 		return sessionSpawnedMsg{session: sess}
+	}
+}
+
+func typeContextPromptCmd(conn protocol.Conn, sessionID, prompt string) tea.Cmd {
+	return func() tea.Msg {
+		resp, err := protocol.SendRequest(conn, protocol.MsgSessionTypeInput, "dash-type-context", protocol.SessionInputPayload{
+			SessionID: sessionID,
+			Input:     prompt,
+		}, protocol.DefaultTimeout)
+		if err != nil {
+			return tui.ErrMsg{Err: err}
+		}
+		if resp.Type == protocol.MsgError {
+			return statusMsg{text: "Error: " + protocol.ParseErrorPayload(resp)}
+		}
+		return statusMsg{text: "Context prompt typed"}
 	}
 }
 

@@ -32,6 +32,13 @@ func (m Model) handleAttachKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		return m, nil
+	case msg.Code == 'p':
+		if m.attachedSession != nil && m.attachedSession.ContextPrompt != "" && m.conn != nil {
+			prompt := m.attachedSession.ContextPrompt
+			m.attachedSession.ContextPrompt = ""
+			return m, typeContextPromptCmd(m.conn, m.attachedSession.ID, prompt)
+		}
+		return m, nil
 	}
 	return m, nil
 }
@@ -68,7 +75,11 @@ func (m Model) renderAttachView() tea.View {
 	if m.renameActive {
 		b.WriteString(statusBarStyle.Render(fmt.Sprintf("  Rename: %s█  (enter: confirm | esc: cancel)", m.renameInput)))
 	} else {
-		b.WriteString(statusBarStyle.Render("  esc: back | n: rename | pgup/pgdn: scroll"))
+		bar := "  esc: back | n: rename | pgup/pgdn: scroll"
+		if m.attachedSession != nil && m.attachedSession.ContextPrompt != "" {
+			bar += " | p: paste context"
+		}
+		b.WriteString(statusBarStyle.Render(bar))
 	}
 
 	v := tea.NewView(b.String())
