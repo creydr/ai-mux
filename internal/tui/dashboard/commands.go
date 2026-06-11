@@ -227,6 +227,56 @@ func renameSessionCmd(conn protocol.Conn, sessionID, name string) tea.Cmd {
 	}
 }
 
+func fetchJiraItemsCmd(conn protocol.Conn, offset, limit int) tea.Cmd {
+	return func() tea.Msg {
+		resp, err := protocol.SendRequest(conn, protocol.MsgListJiraItems, "dash-jira", protocol.JiraListPayload{
+			Offset: offset,
+			Limit:  limit,
+		}, protocol.DefaultTimeout)
+		if err != nil {
+			return tui.ErrMsg{Err: err}
+		}
+		if resp.Type == protocol.MsgError {
+			return statusMsg{text: "Jira: " + protocol.ParseErrorPayload(resp)}
+		}
+		payload, err := protocol.ParsePayload[protocol.JiraItemsPayload](resp)
+		if err != nil {
+			return tui.ErrMsg{Err: fmt.Errorf("parsing jira items: %w", err)}
+		}
+		var items []provider.JiraItem
+		if err := json.Unmarshal(payload.Items, &items); err != nil {
+			return tui.ErrMsg{Err: fmt.Errorf("parsing jira items: %w", err)}
+		}
+		return jiraItemsReceivedMsg{items: items, total: payload.Total, offset: offset}
+	}
+}
+
+func spawnJiraSessionCmd(conn protocol.Conn, repo, itemKey, agent, worktreeAction string) tea.Cmd {
+	return func() tea.Msg {
+		resp, err := protocol.SendRequest(conn, protocol.MsgSessionSpawn, "dash-spawn-jira", protocol.SessionSpawnPayload{
+			Repo:           repo,
+			ItemType:       string(provider.ItemTypeJira),
+			ItemKey:        itemKey,
+			Agent:          agent,
+			WorktreeAction: worktreeAction,
+		}, protocol.DefaultTimeout)
+		if err != nil {
+			return tui.ErrMsg{Err: err}
+		}
+		if resp.Type == protocol.MsgWorktreeExists {
+			return worktreeExistsMsg{repo: repo, itemType: string(provider.ItemTypeJira), agent: agent, itemKey: itemKey}
+		}
+		if resp.Type == protocol.MsgError {
+			return statusMsg{text: "Error: " + protocol.ParseErrorPayload(resp)}
+		}
+		sess, err := protocol.ParsePayload[protocol.SessionPayload](resp)
+		if err != nil {
+			return tui.ErrMsg{Err: fmt.Errorf("parsing session: %w", err)}
+		}
+		return sessionSpawnedMsg{session: sess}
+	}
+}
+
 func listenAttachOutputCmd(conn protocol.Conn) tea.Cmd {
 	return func() tea.Msg {
 		msg, err := conn.Receive()

@@ -33,6 +33,9 @@ func (m Model) handleAgentPickerKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.pendingSpawn = nil
 			m.view = viewOverview
 			m.rebuildViewport()
+			if req.itemKey != "" {
+				return m, spawnJiraSessionCmd(m.conn, req.repo, req.itemKey, agent, "")
+			}
 			return m, spawnSessionCmd(m.conn, req.repo, req.number, req.itemType, agent, "")
 		}
 		return m, nil
@@ -47,7 +50,11 @@ func (m Model) renderAgentPicker() tea.View {
 	b.WriteString("\n\n")
 
 	if m.pendingSpawn != nil {
-		b.WriteString(fmt.Sprintf("  Spawning session for %s#%d\n\n", m.pendingSpawn.repo, m.pendingSpawn.number))
+		if m.pendingSpawn.itemKey != "" {
+			b.WriteString(fmt.Sprintf("  Spawning session for %s in %s\n\n", m.pendingSpawn.itemKey, m.pendingSpawn.repo))
+		} else {
+			b.WriteString(fmt.Sprintf("  Spawning session for %s#%d\n\n", m.pendingSpawn.repo, m.pendingSpawn.number))
+		}
 	}
 
 	for i, name := range m.agents {
@@ -101,6 +108,9 @@ func (m Model) handleWorktreeChoiceKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd)
 			m.pendingSpawn = nil
 			m.view = viewOverview
 			m.rebuildViewport()
+			if req.itemKey != "" {
+				return m, spawnJiraSessionCmd(m.conn, req.repo, req.itemKey, req.agent, action)
+			}
 			return m, spawnSessionCmd(m.conn, req.repo, req.number, req.itemType, req.agent, action)
 		}
 		return m, nil
@@ -199,4 +209,70 @@ func (m Model) renderSessionPicker() tea.View {
 	v := tea.NewView(b.String())
 	v.AltScreen = true
 	return v
+}
+
+// Repo picker
+
+func (m Model) handleRepoPickerKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	switch {
+	case msg.Code == tea.KeyEscape || msg.Code == 'q':
+		m.view = viewOverview
+		m.repoPickerActive = false
+		m.pendingSpawn = nil
+		m.rebuildViewport()
+		return m, nil
+	case msg.Code == 'j' || msg.Code == tea.KeyDown:
+		if m.repoPickerCursor < len(m.configuredRepos)-1 {
+			m.repoPickerCursor++
+		}
+		return m, nil
+	case msg.Code == 'k' || msg.Code == tea.KeyUp:
+		if m.repoPickerCursor > 0 {
+			m.repoPickerCursor--
+		}
+		return m, nil
+	case msg.Code == tea.KeyEnter:
+		if m.pendingSpawn != nil && m.repoPickerCursor < len(m.configuredRepos) {
+			m.pendingSpawn.repo = m.configuredRepos[m.repoPickerCursor]
+			m.repoPickerActive = false
+			if m.defaultAgent != "" {
+				req := m.pendingSpawn
+				m.pendingSpawn = nil
+				m.view = viewOverview
+				m.rebuildViewport()
+				return m, spawnJiraSessionCmd(m.conn, req.repo, req.itemKey, m.defaultAgent, "")
+			}
+			m.agentCursor = 0
+			m.view = viewAgentPicker
+			return m, nil
+		}
+		return m, nil
+	}
+	return m, nil
+}
+
+func (m Model) renderRepoPicker() tea.View {
+	var b strings.Builder
+
+	b.WriteString(titleStyle.Render("  Select Repository"))
+	b.WriteString("\n\n")
+
+	if m.pendingSpawn != nil && m.pendingSpawn.itemKey != "" {
+		b.WriteString(fmt.Sprintf("  Spawning session for %s\n\n", m.pendingSpawn.itemKey))
+	}
+
+	for i, name := range m.configuredRepos {
+		if i == m.repoPickerCursor {
+			b.WriteString(selectedItemStyle.Render("> "+name) + "\n")
+		} else {
+			b.WriteString("  " + name + "\n")
+		}
+	}
+
+	b.WriteString("\n")
+	b.WriteString(statusBarStyle.Render("  enter: select | esc: cancel"))
+
+	rpv := tea.NewView(b.String())
+	rpv.AltScreen = true
+	return rpv
 }

@@ -26,6 +26,9 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.view == viewSessionPicker {
 		return m.handleSessionPickerKey(msg)
 	}
+	if m.view == viewRepoPicker {
+		return m.handleRepoPickerKey(msg)
+	}
 	if m.view == viewHelp {
 		return m.handleHelpKey(msg)
 	}
@@ -44,7 +47,15 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.focusPanel = panelItems
 		return m, nil
 	case msg.Code == tea.KeyTab:
-		m.activeTab = (m.activeTab + 1) % tab(len(tabNames))
+		idx := 0
+		for i, t := range m.enabledTabs {
+			if t == m.activeTab {
+				idx = i
+				break
+			}
+		}
+		idx = (idx + 1) % len(m.enabledTabs)
+		m.activeTab = m.enabledTabs[idx]
 		m.cursor = 0
 		m.sessionCursor = 0
 		m.expanded = make(map[string]bool)
@@ -53,6 +64,13 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.issueBadge = 0
 		case tabPRs:
 			m.prBadge = 0
+		case tabJira:
+			m.jiraBadge = 0
+			m.jiraCursor = 0
+			if m.conn != nil {
+				m.rebuildViewport()
+				return m, fetchJiraItemsCmd(m.conn, 0, 0)
+			}
 		case tabSessions:
 			m.sessionBadge = 0
 			m.sessionScrollPos = 0
@@ -68,6 +86,15 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			if m.sessionCursor < len(m.sessions)-1 {
 				m.sessionCursor++
 				m.sessionScrollPos = 0
+			}
+			m.rebuildViewport()
+		} else if m.activeTab == tabJira {
+			maxIdx := len(m.jiraItems) - 1
+			if m.jiraHasMore {
+				maxIdx++
+			}
+			if m.jiraCursor < maxIdx {
+				m.jiraCursor++
 			}
 			m.rebuildViewport()
 		} else if m.focusPanel == panelRepos {
@@ -90,6 +117,11 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 				m.sessionScrollPos = 0
 			}
 			m.rebuildViewport()
+		} else if m.activeTab == tabJira {
+			if m.jiraCursor > 0 {
+				m.jiraCursor--
+			}
+			m.rebuildViewport()
 		} else if m.focusPanel == panelRepos {
 			if m.repoCursor > 0 {
 				m.repoCursor--
@@ -102,6 +134,19 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case msg.Code == tea.KeyEnter:
+		if m.activeTab == tabJira {
+			if m.jiraCursor >= len(m.jiraItems) && m.jiraHasMore {
+				return m, fetchJiraItemsCmd(m.conn, m.jiraOffset, 0)
+			}
+			item := m.selectedJiraItem()
+			if item != nil && m.conn != nil {
+				detail := attach.NewEmbeddedJira(m.conn, item.Key, m.width, m.height, item)
+				m.itemDetail = &detail
+				m.view = viewItemDetail
+				return m, m.itemDetail.Init()
+			}
+			return m, nil
+		}
 		if m.activeTab == tabSessions {
 			if m.sessionCursor >= 0 && m.sessionCursor < len(m.sessions) {
 				sess := m.sessions[m.sessionCursor]
@@ -160,6 +205,13 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case msg.Code == 'o' || msg.Code == 'b':
+		if m.activeTab == tabJira {
+			item := m.selectedJiraItem()
+			if item != nil && item.URL != "" {
+				return m, openBrowserCmd(item.URL)
+			}
+			return m, nil
+		}
 		item := m.selectedItem()
 		if item != nil && item.URL != "" {
 			return m, openBrowserCmd(item.URL)
@@ -172,6 +224,27 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if len(m.agents) == 0 {
 			m.statusText = "No agents configured"
 			return m, m.scheduleStatusClear()
+		}
+		if m.activeTab == tabJira {
+			item := m.selectedJiraItem()
+			if item == nil {
+				return m, nil
+			}
+			if len(m.configuredRepos) == 1 {
+				req := &spawnRequest{repo: m.configuredRepos[0], itemType: string(provider.ItemTypeJira), itemKey: item.Key}
+				if m.defaultAgent != "" {
+					return m, spawnJiraSessionCmd(m.conn, req.repo, req.itemKey, m.defaultAgent, "")
+				}
+				m.pendingSpawn = req
+				m.agentCursor = 0
+				m.view = viewAgentPicker
+				return m, nil
+			}
+			m.pendingSpawn = &spawnRequest{itemType: string(provider.ItemTypeJira), itemKey: item.Key}
+			m.repoPickerCursor = 0
+			m.repoPickerActive = true
+			m.view = viewRepoPicker
+			return m, nil
 		}
 		item := m.selectedItem()
 		if item == nil {
@@ -197,6 +270,15 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 					return m, stopSessionCmd(m.conn, sess.ID)
 				}
 			}
+		} else if m.activeTab == tabJira {
+			item := m.selectedJiraItem()
+			if item != nil {
+				for _, sess := range m.sessions {
+					if sess.ItemKey == item.Key && (sess.Status == "running" || sess.Status == "pending") {
+						return m, stopSessionCmd(m.conn, sess.ID)
+					}
+				}
+			}
 		} else {
 			item := m.selectedItem()
 			if item != nil {
@@ -218,6 +300,37 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case msg.Code == 't':
+		if m.activeTab == tabJira {
+			item := m.selectedJiraItem()
+			if item == nil {
+				return m, nil
+			}
+			var matched []protocol.SessionPayload
+			for _, sess := range m.sessions {
+				if sess.ItemKey == item.Key {
+					matched = append(matched, sess)
+				}
+			}
+			if len(matched) == 0 {
+				m.statusText = "No sessions for this item"
+				return m, m.scheduleStatusClear()
+			}
+			if len(matched) == 1 {
+				sess := matched[0]
+				if sess.Status == "running" || sess.Status == "pending" {
+					return m, tmuxAttachCmd(sess.ID, sess.Name)
+				}
+				m.attachedSession = &sess
+				if m.conn != nil {
+					return m, attachSessionCmd(m.conn, sess.ID)
+				}
+				return m, nil
+			}
+			m.sessionPickerItems = matched
+			m.sessionPickerCursor = 0
+			m.view = viewSessionPicker
+			return m, nil
+		}
 		if m.activeTab != tabSessions {
 			item := m.selectedItem()
 			if item == nil {
@@ -253,6 +366,9 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case msg.Code == 'r':
 		if m.conn != nil {
+			if m.activeTab == tabJira {
+				return m, fetchJiraItemsCmd(m.conn, 0, 0)
+			}
 			m.fullLoaded = make(map[string]bool)
 			return m, fetchItemsCmd(m.conn, m.itemsPerRepo)
 		}

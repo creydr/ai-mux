@@ -69,6 +69,7 @@ type worktreeExistsMsg struct {
 	number   int
 	itemType string
 	agent    string
+	itemKey  string
 }
 
 type sessionRenamedMsg struct {
@@ -78,4 +79,10 @@ type sessionRenamedMsg struct {
 
 type sessionTickMsg struct {
 	id int
+}
+
+type jiraItemsReceivedMsg struct {
+	items  []provider.JiraItem
+	total  int
+	offset int
 }

@@ -53,6 +53,15 @@ func (m Model) renderHelp() tea.View {
 		{"r", "Refresh"},
 	})
 
+	section("Jira", [][2]string{
+		{"a", "Spawn agent (select repo)"},
+		{"t", "Attach to session"},
+		{"b / o", "Open in browser"},
+		{"s", "Stop session"},
+		{"Enter", "View details / load more"},
+		{"r", "Refresh"},
+	})
+
 	section("Sessions", [][2]string{
 		{"Enter", "Attach to session"},
 		{"n", "Rename session"},

@@ -262,3 +262,79 @@ func countRepoItems(items []provider.Item, repo string) int {
 	}
 	return count
 }
+
+func buildJiraContentLines(items []provider.JiraItem, cursor, width int, hasMore bool, sessions []protocol.SessionPayload) ([]string, int) {
+	if len(items) == 0 {
+		return []string{statusBarStyle.Render("  No Jira items")}, 0
+	}
+
+	sessionMap := make(map[string]*protocol.SessionPayload)
+	for i := range sessions {
+		s := &sessions[i]
+		if s.ItemKey != "" && (s.Status == "running" || s.Status == "pending" || s.Status == "completed") {
+			sessionMap[s.ItemKey] = s
+		}
+	}
+
+	const keyCol = 12
+	const statusCol = 16
+	const priorityCol = 10
+	fixedCols := 2 + keyCol + 2 + statusCol + 2 + priorityCol + 2
+	summaryCol := width - fixedCols
+	if summaryCol < 20 {
+		summaryCol = 20
+	}
+
+	var lines []string
+	cursorLine := 0
+
+	for i, item := range items {
+		summary := item.Summary
+		if len(summary) > summaryCol {
+			summary = summary[:summaryCol-1] + "…"
+		}
+
+		status := item.Status
+		if len(status) > statusCol-2 {
+			status = status[:statusCol-3] + "…"
+		}
+		statusStr := fmt.Sprintf("[%s]", status)
+
+		priority := item.Priority
+		if len(priority) > priorityCol-2 {
+			priority = priority[:priorityCol-3] + "…"
+		}
+		priorityStr := fmt.Sprintf("[%s]", priority)
+
+		text := fmt.Sprintf("  %-*s  %-*s  %-*s  %s",
+			keyCol, item.Key,
+			summaryCol, summary,
+			statusCol, statusStr,
+			priorityStr,
+		)
+
+		if sess, ok := sessionMap[item.Key]; ok {
+			text += " " + sessionBadge(sess.Status, sess.WaitingInput)
+		}
+
+		if i == cursor {
+			cursorLine = len(lines)
+			lines = append(lines, selectedItemStyle.Width(width).Render(text))
+		} else {
+			lines = append(lines, normalItemStyle.Render(text))
+		}
+	}
+
+	if hasMore {
+		label := "    [more...]"
+		idx := len(items)
+		if idx == cursor {
+			cursorLine = len(lines)
+			lines = append(lines, selectedItemStyle.Width(width).Render(label))
+		} else {
+			lines = append(lines, normalItemStyle.Render(label))
+		}
+	}
+
+	return lines, cursorLine
+}

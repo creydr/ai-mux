@@ -32,6 +32,22 @@ func (m *Model) handleEvent(ev event.Event) {
 		if ev.Item != nil {
 			m.updateItem(m.prs, *ev.Item)
 		}
+	case event.TypeNewJiraItem:
+		if ev.JiraItem != nil {
+			m.jiraItems = append(m.jiraItems, *ev.JiraItem)
+			if m.activeTab != tabJira {
+				m.jiraBadge++
+			}
+		}
+	case event.TypeJiraItemUpdated:
+		if ev.JiraItem != nil {
+			for i, item := range m.jiraItems {
+				if item.Key == ev.JiraItem.Key {
+					m.jiraItems[i] = *ev.JiraItem
+					break
+				}
+			}
+		}
 	case event.TypeSessionStatus:
 		if ev.Session != nil {
 			m.handleSessionEvent(*ev.Session)
@@ -93,6 +109,18 @@ func (m Model) statusBarText() string {
 	switch m.activeTab {
 	case tabSessions:
 		return "enter: attach | n: rename | s: stop | tab: switch | ?: help"
+	case tabJira:
+		bar := "a: spawn agent"
+		if item := m.selectedJiraItem(); item != nil {
+			for _, sess := range m.sessions {
+				if sess.ItemKey == item.Key {
+					bar += " | t: attach"
+					break
+				}
+			}
+		}
+		bar += " | b: open in browser | tab: switch | r: refresh | ?: help"
+		return bar
 	default:
 		bar := "a: spawn agent"
 		if item := m.selectedItem(); item != nil {

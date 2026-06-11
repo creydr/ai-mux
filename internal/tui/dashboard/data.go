@@ -113,3 +113,10 @@ func (m Model) updateItem(items []provider.Item, updated provider.Item) {
 		}
 	}
 }
+
+func (m Model) selectedJiraItem() *provider.JiraItem {
+	if m.jiraCursor >= 0 && m.jiraCursor < len(m.jiraItems) {
+		return &m.jiraItems[m.jiraCursor]
+	}
+	return nil
+}

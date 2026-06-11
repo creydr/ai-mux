@@ -27,6 +27,7 @@ const (
 	viewWorktreeChoice
 	viewSessionPicker
 	viewHelp
+	viewRepoPicker
 )
 
 type spawnRequest struct {
@@ -34,6 +35,7 @@ type spawnRequest struct {
 	number   int
 	itemType string
 	agent    string
+	itemKey  string
 }
 
 type panel int
@@ -97,9 +99,20 @@ type Model struct {
 
 	sessionTickID    int
 	sessionScrollPos int
+
+	jiraEnabled      bool
+	jiraItems        []provider.JiraItem
+	jiraCursor       int
+	jiraBadge        int
+	jiraHasMore      bool
+	jiraOffset       int
+	configuredRepos  []string
+	repoPickerActive bool
+	repoPickerCursor int
+	enabledTabs      []tab
 }
 
-func New(conn protocol.Conn, itemsPerRepo int, agents []string, defaultAgent string) Model {
+func New(conn protocol.Conn, itemsPerRepo int, agents []string, defaultAgent string, jiraEnabled bool, repoNames []string) Model {
 	if itemsPerRepo <= 0 {
 		itemsPerRepo = 3
 	}
@@ -111,17 +124,21 @@ func New(conn protocol.Conn, itemsPerRepo int, agents []string, defaultAgent str
 	avp.KeyMap = viewport.KeyMap{}
 	avp.FillHeight = true
 	avp.MouseWheelEnabled = true
+	tabs := enabledTabs(jiraEnabled)
 	return Model{
-		conn:           conn,
-		loading:        conn != nil,
-		focusPanel:     panelItems,
-		expanded:       make(map[string]bool),
-		fullLoaded:     make(map[string]bool),
-		itemsPerRepo:   itemsPerRepo,
-		viewport:       vp,
-		agents:         agents,
-		defaultAgent:   defaultAgent,
-		attachViewport: avp,
+		conn:            conn,
+		loading:         conn != nil,
+		focusPanel:      panelItems,
+		expanded:        make(map[string]bool),
+		fullLoaded:      make(map[string]bool),
+		itemsPerRepo:    itemsPerRepo,
+		viewport:        vp,
+		agents:          agents,
+		defaultAgent:    defaultAgent,
+		attachViewport:  avp,
+		jiraEnabled:     jiraEnabled,
+		configuredRepos: repoNames,
+		enabledTabs:     tabs,
 	}
 }
 
@@ -129,9 +146,11 @@ func (m Model) Init() tea.Cmd {
 	if m.conn == nil {
 		return nil
 	}
-	return tea.Batch(
-		fetchItemsCmd(m.conn, m.itemsPerRepo),
-	)
+	cmds := []tea.Cmd{fetchItemsCmd(m.conn, m.itemsPerRepo)}
+	if m.jiraEnabled {
+		cmds = append(cmds, fetchJiraItemsCmd(m.conn, 0, 0))
+	}
+	return tea.Batch(cmds...)
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -242,6 +261,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, m.startSessionTick()
 		}
 		return m, nil
+	case jiraItemsReceivedMsg:
+		if msg.offset == 0 {
+			m.jiraItems = msg.items
+		} else {
+			m.jiraItems = append(m.jiraItems, msg.items...)
+		}
+		m.jiraHasMore = len(m.jiraItems) < msg.total
+		m.jiraOffset = msg.offset + len(msg.items)
+		m.rebuildViewport()
+		return m, nil
 	case statusTickMsg:
 		if msg.id == m.statusTickID && time.Now().After(msg.due) {
 			m.statusText = ""
@@ -284,8 +313,34 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.view = viewAgentPicker
 		m.itemDetail = nil
 		return m, nil
+	case attach.SpawnJiraSessionMsg:
+		if len(m.agents) == 0 {
+			m.statusText = "No agents configured"
+			m.view = viewOverview
+			m.itemDetail = nil
+			m.rebuildViewport()
+			return m, m.scheduleStatusClear()
+		}
+		m.view = viewOverview
+		m.itemDetail = nil
+		if len(m.configuredRepos) == 1 {
+			req := &spawnRequest{repo: m.configuredRepos[0], itemType: string(provider.ItemTypeJira), itemKey: msg.Key}
+			if m.defaultAgent != "" {
+				m.rebuildViewport()
+				return m, spawnJiraSessionCmd(m.conn, req.repo, req.itemKey, m.defaultAgent, "")
+			}
+			m.pendingSpawn = req
+			m.agentCursor = 0
+			m.view = viewAgentPicker
+			return m, nil
+		}
+		m.pendingSpawn = &spawnRequest{itemType: string(provider.ItemTypeJira), itemKey: msg.Key}
+		m.repoPickerCursor = 0
+		m.repoPickerActive = true
+		m.view = viewRepoPicker
+		return m, nil
 	case worktreeExistsMsg:
-		m.pendingSpawn = &spawnRequest{repo: msg.repo, number: msg.number, itemType: msg.itemType, agent: msg.agent}
+		m.pendingSpawn = &spawnRequest{repo: msg.repo, number: msg.number, itemType: msg.itemType, agent: msg.agent, itemKey: msg.itemKey}
 		m.worktreeChoiceIdx = 0
 		m.view = viewWorktreeChoice
 		return m, nil
@@ -334,6 +389,9 @@ func (m Model) View() tea.View {
 	if m.view == viewSessionPicker {
 		return m.renderSessionPicker()
 	}
+	if m.view == viewRepoPicker {
+		return m.renderRepoPicker()
+	}
 	if m.view == viewHelp {
 		return m.renderHelp()
 	}
@@ -342,7 +400,7 @@ func (m Model) View() tea.View {
 
 	b.WriteString(titleStyle.Render("  ai-mux"))
 	b.WriteString("\n\n")
-	b.WriteString(renderTabs(m.activeTab, m.issueBadge, m.prBadge, m.sessionBadge))
+	b.WriteString(renderTabs(m.activeTab, m.jiraEnabled, m.issueBadge, m.prBadge, m.jiraBadge, m.sessionBadge))
 	b.WriteString("\n")
 
 	if m.err != nil {
@@ -363,6 +421,12 @@ func (m Model) View() tea.View {
 			b.WriteString(m.viewport.View())
 			b.WriteString("\n")
 			b.WriteString(statusBarStyle.Render(fmt.Sprintf("  Rename: %s█", m.renameInput)))
+		} else {
+			b.WriteString(m.viewport.View())
+		}
+	} else if m.activeTab == tabJira {
+		if len(m.jiraItems) == 0 {
+			b.WriteString(statusBarStyle.Render("  No Jira items"))
 		} else {
 			b.WriteString(m.viewport.View())
 		}
@@ -407,7 +471,23 @@ func (m *Model) rebuildViewport() {
 		width = 80
 	}
 
-	if m.activeTab == tabSessions {
+	if m.activeTab == tabJira {
+		m.viewport.SetWidth(width)
+		m.viewport.SetHeight(vpHeight)
+		maxCursor := len(m.jiraItems) - 1
+		if m.jiraHasMore {
+			maxCursor++
+		}
+		if m.jiraCursor > maxCursor {
+			m.jiraCursor = maxCursor
+		}
+		if m.jiraCursor < 0 {
+			m.jiraCursor = 0
+		}
+		lines, cursorLine := buildJiraContentLines(m.jiraItems, m.jiraCursor, width, m.jiraHasMore, m.sessions)
+		m.viewport.SetContentLines(lines)
+		m.cursorLine = cursorLine
+	} else if m.activeTab == tabSessions {
 		m.viewport.SetWidth(width)
 		m.viewport.SetHeight(vpHeight)
 		lines, cursorLine := buildSessionLines(m.sessions, m.sessionCursor, width, m.sessionScrollPos)
