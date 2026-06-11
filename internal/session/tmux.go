@@ -11,6 +11,7 @@ type TmuxExecutor interface {
 	NewSession(name, workdir, command string) error
 	KillSession(name string) error
 	SendKeys(name, keys string) error
+	TypeKeys(name, text string) error
 	ListSessions(prefix string) ([]string, error)
 	HasSession(name string) bool
 	IsPaneDead(name string) bool
@@ -46,6 +47,14 @@ func (t *tmuxCLI) SendKeys(name, keys string) error {
 	cmd := exec.Command("tmux", "send-keys", "-t", name, keys, "Enter")
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("tmux send-keys: %s: %w", strings.TrimSpace(string(out)), err)
+	}
+	return nil
+}
+
+func (t *tmuxCLI) TypeKeys(name, text string) error {
+	cmd := exec.Command("tmux", "send-keys", "-t", name, "-l", text)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("tmux type-keys: %s: %w", strings.TrimSpace(string(out)), err)
 	}
 	return nil
 }

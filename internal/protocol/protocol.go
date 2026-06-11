@@ -12,13 +12,14 @@ const (
 	MsgMarkRead   MessageType = "mark_read"
 	MsgGetStatus  MessageType = "get_status"
 
-	MsgSessionSpawn  MessageType = "session_spawn"
-	MsgSessionList   MessageType = "session_list"
-	MsgSessionAttach MessageType = "session_attach"
-	MsgSessionDetach MessageType = "session_detach"
-	MsgSessionInput  MessageType = "session_input"
-	MsgSessionStop   MessageType = "session_stop"
-	MsgSessionRename MessageType = "session_rename"
+	MsgSessionSpawn     MessageType = "session_spawn"
+	MsgSessionList      MessageType = "session_list"
+	MsgSessionAttach    MessageType = "session_attach"
+	MsgSessionDetach    MessageType = "session_detach"
+	MsgSessionInput     MessageType = "session_input"
+	MsgSessionStop      MessageType = "session_stop"
+	MsgSessionRename    MessageType = "session_rename"
+	MsgSessionTypeInput MessageType = "session.type_input"
 
 	MsgWorktreeExists MessageType = "worktree_exists"
 

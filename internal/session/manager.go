@@ -158,7 +158,7 @@ func (m *Manager) stopMonitor(sessionID string) {
 	}
 }
 
-func (m *Manager) Spawn(itemRepo string, itemNumber int, itemType string, itemKey string, agentName string, wtAction WorktreeAction) (*Session, error) {
+func (m *Manager) Spawn(itemRepo string, itemNumber int, itemType string, itemKey string, agentName string, wtAction WorktreeAction, contextPrompt string) (*Session, error) {
 	m.mu.Lock()
 
 	active := 0
@@ -195,16 +195,17 @@ func (m *Manager) Spawn(itemRepo string, itemNumber int, itemType string, itemKe
 	}
 
 	sess := &Session{
-		ID:          id,
-		ItemRepo:    itemRepo,
-		ItemNumber:  itemNumber,
-		ItemType:    itemType,
-		ItemKey:     itemKey,
-		Agent:       agentName,
-		TmuxSession: tmuxPrefix + id,
-		RepoPath:    repo.Path,
-		Status:      StatusPending,
-		CreatedAt:   time.Now(),
+		ID:            id,
+		ItemRepo:      itemRepo,
+		ItemNumber:    itemNumber,
+		ItemType:      itemType,
+		ItemKey:       itemKey,
+		Agent:         agentName,
+		TmuxSession:   tmuxPrefix + id,
+		RepoPath:      repo.Path,
+		Status:        StatusPending,
+		ContextPrompt: contextPrompt,
+		CreatedAt:     time.Now(),
 	}
 
 	var wtName string
@@ -440,6 +441,23 @@ func (m *Manager) SendInput(sessionID, input string) error {
 	m.mu.RUnlock()
 
 	return m.tmux.SendKeys(tmuxName, input)
+}
+
+func (m *Manager) TypeInput(sessionID, text string) error {
+	m.mu.RLock()
+	sess, ok := m.sessions[sessionID]
+	if !ok {
+		m.mu.RUnlock()
+		return fmt.Errorf("session %q not found", sessionID)
+	}
+	if !sess.IsActive() {
+		m.mu.RUnlock()
+		return fmt.Errorf("session %q is not active", sessionID)
+	}
+	tmuxName := sess.TmuxSession
+	m.mu.RUnlock()
+
+	return m.tmux.TypeKeys(tmuxName, text)
 }
 
 func (m *Manager) Reconcile() error {

@@ -48,6 +48,16 @@ func (m *mockTmux) SendKeys(name, keys string) error {
 	return nil
 }
 
+func (m *mockTmux) TypeKeys(name, text string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if !m.sessions[name] {
+		return fmt.Errorf("session %q not found", name)
+	}
+	m.keys = append(m.keys, text)
+	return nil
+}
+
 func (m *mockTmux) ListSessions(prefix string) ([]string, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -173,7 +183,7 @@ func testManager(t *testing.T) (*Manager, *mockTmux) {
 func TestManager_Spawn(t *testing.T) {
 	mgr, mock := testManager(t)
 
-	sess, err := mgr.Spawn("owner/repo", 42, "issue", "", "claude", "")
+	sess, err := mgr.Spawn("owner/repo", 42, "issue", "", "claude", "", "")
 	if err != nil {
 		t.Fatalf("Spawn failed: %v", err)
 	}
@@ -207,7 +217,7 @@ func TestManager_Spawn(t *testing.T) {
 func TestManager_Spawn_UnknownAgent(t *testing.T) {
 	mgr, _ := testManager(t)
 
-	_, err := mgr.Spawn("owner/repo", 42, "issue", "", "unknown", "")
+	_, err := mgr.Spawn("owner/repo", 42, "issue", "", "unknown", "", "")
 	if err == nil {
 		t.Fatal("expected error for unknown agent")
 	}
@@ -216,7 +226,7 @@ func TestManager_Spawn_UnknownAgent(t *testing.T) {
 func TestManager_Spawn_UnknownRepo(t *testing.T) {
 	mgr, _ := testManager(t)
 
-	_, err := mgr.Spawn("other/repo", 42, "issue", "", "claude", "")
+	_, err := mgr.Spawn("other/repo", 42, "issue", "", "claude", "", "")
 	if err == nil {
 		t.Fatal("expected error for unknown repo")
 	}
@@ -226,13 +236,13 @@ func TestManager_Spawn_MaxParallel(t *testing.T) {
 	mgr, _ := testManager(t)
 
 	for i := 0; i < 3; i++ {
-		_, err := mgr.Spawn("owner/repo", i+1, "issue", "", "claude", "")
+		_, err := mgr.Spawn("owner/repo", i+1, "issue", "", "claude", "", "")
 		if err != nil {
 			t.Fatalf("Spawn %d failed: %v", i+1, err)
 		}
 	}
 
-	_, err := mgr.Spawn("owner/repo", 100, "issue", "", "claude", "")
+	_, err := mgr.Spawn("owner/repo", 100, "issue", "", "claude", "", "")
 	if err == nil {
 		t.Fatal("expected error for exceeding max parallel")
 	}
@@ -241,7 +251,7 @@ func TestManager_Spawn_MaxParallel(t *testing.T) {
 func TestManager_Stop(t *testing.T) {
 	mgr, mock := testManager(t)
 
-	sess, err := mgr.Spawn("owner/repo", 42, "issue", "", "claude", "")
+	sess, err := mgr.Spawn("owner/repo", 42, "issue", "", "claude", "", "")
 	if err != nil {
 		t.Fatalf("Spawn failed: %v", err)
 	}
@@ -279,11 +289,11 @@ func TestManager_Stop_NotFound(t *testing.T) {
 func TestManager_List(t *testing.T) {
 	mgr, _ := testManager(t)
 
-	_, err := mgr.Spawn("owner/repo", 1, "issue", "", "claude", "")
+	_, err := mgr.Spawn("owner/repo", 1, "issue", "", "claude", "", "")
 	if err != nil {
 		t.Fatalf("Spawn 1 failed: %v", err)
 	}
-	_, err = mgr.Spawn("owner/repo", 2, "pr", "", "claude", "")
+	_, err = mgr.Spawn("owner/repo", 2, "pr", "", "claude", "", "")
 	if err != nil {
 		t.Fatalf("Spawn 2 failed: %v", err)
 	}
@@ -297,7 +307,7 @@ func TestManager_List(t *testing.T) {
 func TestManager_Get(t *testing.T) {
 	mgr, _ := testManager(t)
 
-	sess, err := mgr.Spawn("owner/repo", 42, "issue", "", "claude", "")
+	sess, err := mgr.Spawn("owner/repo", 42, "issue", "", "claude", "", "")
 	if err != nil {
 		t.Fatalf("Spawn failed: %v", err)
 	}
@@ -327,7 +337,7 @@ func TestManager_Get_NotFound(t *testing.T) {
 func TestManager_SendInput(t *testing.T) {
 	mgr, mock := testManager(t)
 
-	sess, err := mgr.Spawn("owner/repo", 42, "issue", "", "claude", "")
+	sess, err := mgr.Spawn("owner/repo", 42, "issue", "", "claude", "", "")
 	if err != nil {
 		t.Fatalf("Spawn failed: %v", err)
 	}
@@ -346,7 +356,7 @@ func TestManager_SendInput(t *testing.T) {
 func TestManager_SendInput_NotActive(t *testing.T) {
 	mgr, _ := testManager(t)
 
-	sess, err := mgr.Spawn("owner/repo", 42, "issue", "", "claude", "")
+	sess, err := mgr.Spawn("owner/repo", 42, "issue", "", "claude", "", "")
 	if err != nil {
 		t.Fatalf("Spawn failed: %v", err)
 	}
@@ -362,7 +372,7 @@ func TestManager_SendInput_NotActive(t *testing.T) {
 func TestManager_FindByItem(t *testing.T) {
 	mgr, _ := testManager(t)
 
-	_, err := mgr.Spawn("owner/repo", 42, "issue", "", "claude", "")
+	_, err := mgr.Spawn("owner/repo", 42, "issue", "", "claude", "", "")
 	if err != nil {
 		t.Fatalf("Spawn failed: %v", err)
 	}
@@ -427,7 +437,7 @@ func TestManager_StatusCallback(t *testing.T) {
 	mgr.SetWorktrees(newMockWorktrees())
 	mgr.SetRunner(&mockRunner{})
 
-	sess, err := mgr.Spawn("owner/repo", 42, "issue", "", "claude", "")
+	sess, err := mgr.Spawn("owner/repo", 42, "issue", "", "claude", "", "")
 	if err != nil {
 		t.Fatalf("Spawn failed: %v", err)
 	}
@@ -495,7 +505,7 @@ func TestManager_PersistAndRestore(t *testing.T) {
 	mgr.SetWorktrees(newMockWorktrees())
 	mgr.SetRunner(&mockRunner{})
 
-	sess, err := mgr.Spawn("owner/repo", 42, "issue", "", "claude", "")
+	sess, err := mgr.Spawn("owner/repo", 42, "issue", "", "claude", "", "")
 	if err != nil {
 		t.Fatalf("Spawn failed: %v", err)
 	}
@@ -599,7 +609,7 @@ func TestStripANSI(t *testing.T) {
 
 func TestManager_Rename(t *testing.T) {
 	mgr, _ := testManager(t)
-	sess, err := mgr.Spawn("owner/repo", 42, "issue", "", "claude", "")
+	sess, err := mgr.Spawn("owner/repo", 42, "issue", "", "claude", "", "")
 	if err != nil {
 		t.Fatalf("Spawn failed: %v", err)
 	}
@@ -632,7 +642,7 @@ func TestManager_WorktreeExists(t *testing.T) {
 		t.Error("worktree should not exist before spawn")
 	}
 
-	_, err := mgr.Spawn("owner/repo", 42, "issue", "", "claude", "")
+	_, err := mgr.Spawn("owner/repo", 42, "issue", "", "claude", "", "")
 	if err != nil {
 		t.Fatalf("Spawn failed: %v", err)
 	}
@@ -649,7 +659,7 @@ func TestManager_WorktreeExists(t *testing.T) {
 func TestManager_FindByWorktree(t *testing.T) {
 	mgr, _ := testManager(t)
 
-	sess, err := mgr.Spawn("owner/repo", 42, "issue", "", "claude", "")
+	sess, err := mgr.Spawn("owner/repo", 42, "issue", "", "claude", "", "")
 	if err != nil {
 		t.Fatalf("Spawn failed: %v", err)
 	}

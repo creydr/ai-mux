@@ -79,20 +79,22 @@ type SessionSpawnPayload struct {
 	Agent          string `json:"agent"`
 	ItemKey        string `json:"item_key,omitempty"`
 	WorktreeAction string `json:"worktree_action,omitempty"`
+	ContextPrompt  string `json:"context_prompt,omitempty"`
 }
 
 type SessionPayload struct {
-	ID           string `json:"id"`
-	Name         string `json:"name,omitempty"`
-	Repo         string `json:"repo"`
-	Number       int    `json:"number"`
-	ItemType     string `json:"item_type"`
-	ItemKey      string `json:"item_key,omitempty"`
-	Agent        string `json:"agent"`
-	Status       string `json:"status"`
-	WaitingInput bool   `json:"waiting_input"`
-	Worktree     string `json:"worktree"`
-	CreatedAt    string `json:"created_at"`
+	ID            string `json:"id"`
+	Name          string `json:"name,omitempty"`
+	Repo          string `json:"repo"`
+	Number        int    `json:"number"`
+	ItemType      string `json:"item_type"`
+	ItemKey       string `json:"item_key,omitempty"`
+	Agent         string `json:"agent"`
+	Status        string `json:"status"`
+	WaitingInput  bool   `json:"waiting_input"`
+	ContextPrompt string `json:"context_prompt,omitempty"`
+	Worktree      string `json:"worktree"`
+	CreatedAt     string `json:"created_at"`
 }
 
 type SessionListPayload struct {

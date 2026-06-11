@@ -247,6 +247,8 @@ func (d *Daemon) handleMessage(cc *clientConn, msg protocol.Message) {
 		d.handleSessionDetach(cc, msg)
 	case protocol.MsgSessionInput:
 		d.handleSessionInput(cc, msg)
+	case protocol.MsgSessionTypeInput:
+		d.handleSessionTypeInput(cc, msg)
 	case protocol.MsgSessionRename:
 		d.handleSessionRename(cc, msg)
 	case protocol.MsgListJiraItems:
@@ -414,7 +416,7 @@ func (d *Daemon) handleSessionSpawn(cc *clientConn, msg protocol.Message) {
 	}
 
 	wtAction := session.WorktreeAction(payload.WorktreeAction)
-	sess, err := d.sessionMgr.Spawn(payload.Repo, payload.Number, payload.ItemType, payload.ItemKey, payload.Agent, wtAction)
+	sess, err := d.sessionMgr.Spawn(payload.Repo, payload.Number, payload.ItemType, payload.ItemKey, payload.Agent, wtAction, payload.ContextPrompt)
 	if err != nil {
 		if errors.Is(err, worktree.ErrWorktreeExists) {
 			resp, err := protocol.NewRequest(protocol.MsgWorktreeExists, msg.ID, payload)
@@ -555,6 +557,30 @@ func (d *Daemon) handleSessionInput(cc *clientConn, msg protocol.Message) {
 	cc.send(resp)
 }
 
+func (d *Daemon) handleSessionTypeInput(cc *clientConn, msg protocol.Message) {
+	if d.sessionMgr == nil {
+		resp, _ := protocol.NewError(msg.ID, "no agents configured")
+		cc.send(resp)
+		return
+	}
+
+	payload, err := protocol.ParsePayload[protocol.SessionInputPayload](msg)
+	if err != nil {
+		resp, _ := protocol.NewError(msg.ID, "invalid payload")
+		cc.send(resp)
+		return
+	}
+
+	if err := d.sessionMgr.TypeInput(payload.SessionID, payload.Input); err != nil {
+		resp, _ := protocol.NewError(msg.ID, err.Error())
+		cc.send(resp)
+		return
+	}
+
+	resp, _ := protocol.NewResponse(msg.ID, map[string]string{"status": "typed"})
+	cc.send(resp)
+}
+
 func (d *Daemon) handleSessionRename(cc *clientConn, msg protocol.Message) {
 	if d.sessionMgr == nil {
 		resp, _ := protocol.NewError(msg.ID, "no agents configured")
@@ -581,16 +607,17 @@ func (d *Daemon) handleSessionRename(cc *clientConn, msg protocol.Message) {
 
 func sessionToPayload(s *session.Session) protocol.SessionPayload {
 	return protocol.SessionPayload{
-		ID:           s.ID,
-		Name:         s.Name,
-		Repo:         s.ItemRepo,
-		Number:       s.ItemNumber,
-		ItemType:     s.ItemType,
-		ItemKey:      s.ItemKey,
-		Agent:        s.Agent,
-		Status:       string(s.Status),
-		WaitingInput: s.WaitingInput,
-		Worktree:     s.Worktree,
-		CreatedAt:    s.CreatedAt.Format(time.RFC3339),
+		ID:            s.ID,
+		Name:          s.Name,
+		Repo:          s.ItemRepo,
+		Number:        s.ItemNumber,
+		ItemType:      s.ItemType,
+		ItemKey:       s.ItemKey,
+		Agent:         s.Agent,
+		Status:        string(s.Status),
+		WaitingInput:  s.WaitingInput,
+		ContextPrompt: s.ContextPrompt,
+		Worktree:      s.Worktree,
+		CreatedAt:     s.CreatedAt.Format(time.RFC3339),
 	}
 }
