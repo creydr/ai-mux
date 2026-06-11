@@ -88,3 +88,41 @@ func renderComments(comments []provider.Comment) string {
 	}
 	return b.String()
 }
+
+func renderJiraHeader(item *provider.JiraItem) string {
+	if item == nil {
+		return headerStyle.Render("Loading...")
+	}
+	title := fmt.Sprintf("%s: %s", item.Key, item.Summary)
+	var meta strings.Builder
+	meta.WriteString(fmt.Sprintf("  Status: %s    Priority: %s    Type: %s\n", item.Status, item.Priority, item.Type))
+	meta.WriteString(fmt.Sprintf("  Assignee: %s    Reporter: %s", item.Assignee, item.Reporter))
+	if len(item.Labels) > 0 {
+		meta.WriteString(fmt.Sprintf("\n  Labels: %s", strings.Join(item.Labels, ", ")))
+	}
+	return headerStyle.Render(title) + "\n" + meta.String()
+}
+
+func renderJiraBody(item *provider.JiraItem, width int) string {
+	if item == nil || item.Description == "" {
+		return bodyStyle.Render("No description")
+	}
+	return renderMarkdown(item.Description, width)
+}
+
+func renderJiraComments(comments []provider.JiraComment) string {
+	if len(comments) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString("\n")
+	b.WriteString(labelStyle.Render("  Comments"))
+	b.WriteString("\n")
+	for _, c := range comments {
+		b.WriteString(commentStyle.Render(
+			commentAuthorStyle.Render(c.Author) + ": " + c.Body,
+		))
+		b.WriteString("\n")
+	}
+	return b.String()
+}

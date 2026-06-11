@@ -40,3 +40,12 @@ type sessionsLoadedMsg struct {
 type statusTextMsg struct {
 	text string
 }
+
+type jiraItemLoadedMsg struct {
+	item     *provider.JiraItem
+	comments []provider.JiraComment
+}
+
+type SpawnJiraSessionMsg struct {
+	Key string
+}

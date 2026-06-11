@@ -24,6 +24,10 @@ type Model struct {
 	scroll   int
 	err      error
 
+	jiraKey      string
+	jiraItem     *provider.JiraItem
+	jiraComments []provider.JiraComment
+
 	renderedLines []string
 
 	sessions      []protocol.SessionPayload
@@ -50,12 +54,30 @@ func NewEmbedded(conn protocol.Conn, ref Ref, width, height int, item *provider.
 	}
 }
 
+func NewEmbeddedJira(conn protocol.Conn, key string, width, height int, item *provider.JiraItem) Model {
+	return Model{
+		conn:     conn,
+		ref:      Ref{Type: provider.ItemTypeJira, Key: key},
+		embedded: true,
+		width:    width,
+		height:   height,
+		jiraKey:  key,
+		jiraItem: item,
+	}
+}
+
 func (m Model) Init() tea.Cmd {
-	if m.conn == nil && m.item == nil {
+	if m.conn == nil && m.item == nil && m.jiraItem == nil {
 		return nil
+	}
+	if m.jiraItem != nil {
+		return renderJiraContentCmd(m.jiraItem, m.jiraComments, m.width, m.err)
 	}
 	if m.item != nil {
 		return renderContentCmd(m.item, m.reviews, m.comments, m.width, m.err)
+	}
+	if m.jiraKey != "" {
+		return fetchJiraItemDetailCmd(m.conn, m.jiraKey)
 	}
 	return fetchItemCmd(m.conn, m.ref)
 }
@@ -67,6 +89,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
+		if m.jiraItem != nil {
+			return m, renderJiraContentCmd(m.jiraItem, m.jiraComments, m.width, m.err)
+		}
 		return m, renderContentCmd(m.item, m.reviews, m.comments, m.width, m.err)
 	case contentRenderedMsg:
 		m.renderedLines = msg.lines
@@ -80,6 +105,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case commentsLoadedMsg:
 		m.comments = msg.comments
 		return m, renderContentCmd(m.item, m.reviews, m.comments, m.width, m.err)
+	case jiraItemLoadedMsg:
+		m.jiraItem = msg.item
+		m.jiraComments = msg.comments
+		return m, renderJiraContentCmd(m.jiraItem, m.jiraComments, m.width, m.err)
 	case tui.ErrMsg:
 		m.err = msg.Err
 		return m, renderContentCmd(m.item, m.reviews, m.comments, m.width, m.err)
@@ -123,6 +152,22 @@ func renderContentCmd(item *provider.Item, reviews []provider.Review, comments [
 	}
 }
 
+func renderJiraContentCmd(item *provider.JiraItem, comments []provider.JiraComment, width int, err error) tea.Cmd {
+	return func() tea.Msg {
+		var b strings.Builder
+		b.WriteString(renderJiraHeader(item))
+		b.WriteString("\n\n")
+		b.WriteString(renderJiraBody(item, width))
+		if len(comments) > 0 {
+			b.WriteString(renderJiraComments(comments))
+		}
+		if err != nil {
+			b.WriteString(fmt.Sprintf("\n  Error: %v\n", err))
+		}
+		return contentRenderedMsg{lines: strings.Split(b.String(), "\n")}
+	}
+}
+
 func (m Model) View() tea.View {
 	if m.sessionPicker {
 		return m.viewSessionPicker()
@@ -132,7 +177,11 @@ func (m Model) View() tea.View {
 	if m.statusText != "" {
 		statusBar += statusStyle.Render("  " + m.statusText)
 	} else if m.embedded {
-		statusBar += statusStyle.Render("  a: spawn agent | t: attach to session | r: refresh | o: open in browser | esc: back")
+		if m.jiraKey != "" {
+			statusBar += statusStyle.Render("  a: spawn agent | r: refresh | o: open in browser | esc: back")
+		} else {
+			statusBar += statusStyle.Render("  a: spawn agent | t: attach to session | r: refresh | o: open in browser | esc: back")
+		}
 	} else {
 		statusBar += statusStyle.Render("  r: refresh | o: open in browser | q: quit")
 	}
@@ -206,16 +255,26 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case msg.Code == 'r':
 		if m.conn != nil {
+			if m.jiraKey != "" {
+				return m, fetchJiraItemDetailCmd(m.conn, m.jiraKey)
+			}
 			return m, fetchItemCmd(m.conn, m.ref)
 		}
 		return m, nil
 	case msg.Code == 'o':
+		if m.jiraItem != nil && m.jiraItem.URL != "" {
+			return m, openBrowserCmd(m.jiraItem.URL)
+		}
 		if m.item != nil && m.item.URL != "" {
 			return m, openBrowserCmd(m.item.URL)
 		}
 		return m, nil
 	case msg.Code == 'a':
 		if m.embedded {
+			if m.jiraKey != "" {
+				key := m.jiraKey
+				return m, func() tea.Msg { return SpawnJiraSessionMsg{Key: key} }
+			}
 			ref := m.ref
 			return m, func() tea.Msg { return SpawnSessionMsg{Ref: ref} }
 		}
@@ -269,11 +328,19 @@ func fetchItemSessionsCmd(conn protocol.Conn, ref Ref) tea.Cmd {
 		if err != nil {
 			return statusTextMsg{text: "Failed to parse sessions"}
 		}
-		repo := ref.Owner + "/" + ref.Repo
 		var filtered []protocol.SessionPayload
-		for _, s := range payload.Sessions {
-			if s.Repo == repo && s.Number == ref.Number {
-				filtered = append(filtered, s)
+		if ref.Key != "" {
+			for _, s := range payload.Sessions {
+				if s.ItemKey == ref.Key {
+					filtered = append(filtered, s)
+				}
+			}
+		} else {
+			repo := ref.Owner + "/" + ref.Repo
+			for _, s := range payload.Sessions {
+				if s.Repo == repo && s.Number == ref.Number {
+					filtered = append(filtered, s)
+				}
 			}
 		}
 		return sessionsLoadedMsg{sessions: filtered}

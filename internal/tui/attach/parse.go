@@ -13,6 +13,7 @@ type Ref struct {
 	Owner  string
 	Repo   string
 	Number int
+	Key    string
 }
 
 func ParseRef(s string) (Ref, error) {
