@@ -43,8 +43,6 @@ agents:
   - name: gemini
     command: gemini
 
-defaultAgent: claude
-
 # Optional: Jira integration
 jira:
   jql: "assignee = currentUser() AND resolution = Unresolved"
@@ -167,7 +165,6 @@ For running/pending sessions, `attach` opens the tmux session directly. For comp
 | `agents[].name` | string | required | Agent identifier |
 | `agents[].command` | string | required | Command to run the agent |
 | `agents[].args` | list | — | Extra arguments passed to the command |
-| `defaultAgent` | string | — | Default agent for actions |
 | `notifications.desktop.enabled` | bool | `false` | Enable desktop notifications |
 | `notifications.desktop.events` | list | all | Event types to notify on |
 | `jira.jql` | string | — | JQL filter for Jira items (required when `jira` block present) |

@@ -36,7 +36,7 @@ func runDashboard(cmd *cobra.Command, args []string) error {
 	for _, r := range cfg.Repos {
 		repoNames = append(repoNames, r.Name)
 	}
-	m := dashboard.New(conn, cfg.Dashboard.ItemsPerRepo, agentNames, cfg.DefaultAgent, cfg.Jira != nil, repoNames)
+	m := dashboard.New(conn, cfg.Dashboard.ItemsPerRepo, agentNames, cfg.Jira != nil, repoNames)
 	p := tea.NewProgram(m)
 	if _, err := p.Run(); err != nil {
 		return fmt.Errorf("running dashboard: %w", err)

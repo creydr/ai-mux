@@ -253,8 +253,8 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			cp := contextPromptForJiraItem(item)
 			if len(m.configuredRepos) == 1 {
 				req := &spawnRequest{repo: m.configuredRepos[0], itemType: string(provider.ItemTypeJira), itemKey: item.Key, contextPrompt: cp}
-				if m.defaultAgent != "" {
-					return m, spawnJiraSessionCmd(m.conn, req.repo, req.itemKey, m.defaultAgent, "", req.contextPrompt)
+				if len(m.agents) == 1 {
+					return m, spawnJiraSessionCmd(m.conn, req.repo, req.itemKey, m.agents[0], "", req.contextPrompt)
 				}
 				m.pendingSpawn = req
 				m.agentCursor = 0
@@ -277,8 +277,8 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		cp := contextPromptForItem(item)
 		req := &spawnRequest{repo: item.Repo.String(), number: item.Number, itemType: itemType, contextPrompt: cp}
-		if m.defaultAgent != "" {
-			return m, spawnSessionCmd(m.conn, req.repo, req.number, req.itemType, m.defaultAgent, "", req.contextPrompt)
+		if len(m.agents) == 1 {
+			return m, spawnSessionCmd(m.conn, req.repo, req.number, req.itemType, m.agents[0], "", req.contextPrompt)
 		}
 		m.pendingSpawn = req
 		m.agentCursor = 0

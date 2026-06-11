@@ -15,9 +15,8 @@ type Config struct {
 	PollInterval  Duration        `yaml:"pollInterval"`
 	GitHub        GitHubConfig    `yaml:"github"`
 	Notifications NotifyConfig    `yaml:"notifications"`
-	Agents        []AgentConfig   `yaml:"agents"`
-	DefaultAgent  string          `yaml:"defaultAgent"`
-	Daemon        DaemonConfig    `yaml:"daemon"`
+	Agents    []AgentConfig   `yaml:"agents"`
+	Daemon    DaemonConfig    `yaml:"daemon"`
 	Dashboard     DashboardConfig `yaml:"dashboard"`
 	Jira          *JiraConfig     `yaml:"jira,omitempty"`
 
@@ -170,19 +169,6 @@ func (c *Config) Validate() error {
 		}
 		if agent.Command == "" {
 			return fmt.Errorf("agent %q has no command", agent.Name)
-		}
-	}
-
-	if c.DefaultAgent != "" {
-		found := false
-		for _, agent := range c.Agents {
-			if agent.Name == c.DefaultAgent {
-				found = true
-				break
-			}
-		}
-		if !found {
-			return fmt.Errorf("defaultAgent %q not found in agents list", c.DefaultAgent)
 		}
 	}
 

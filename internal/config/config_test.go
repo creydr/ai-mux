@@ -24,8 +24,6 @@ agents:
   - name: claude
     command: claude
 
-defaultAgent: claude
-
 notifications:
   desktop:
     enabled: true
@@ -55,9 +53,6 @@ notifications:
 	}
 	if len(cfg.Agents) != 1 {
 		t.Fatalf("expected 1 agent, got %d", len(cfg.Agents))
-	}
-	if cfg.DefaultAgent != "claude" {
-		t.Errorf("expected defaultAgent claude, got %s", cfg.DefaultAgent)
 	}
 	if !cfg.Notifications.Desktop.Enabled {
 		t.Error("expected desktop notifications enabled")
@@ -159,21 +154,10 @@ func TestValidate_InvalidPollInterval(t *testing.T) {
 	}
 }
 
-func TestValidate_DefaultAgentNotFound(t *testing.T) {
-	cfg := Default()
-	cfg.Repos = []RepoConfig{{Name: "o/r", Path: "/tmp"}}
-	cfg.DefaultAgent = "nonexistent"
-	err := cfg.Validate()
-	if err == nil {
-		t.Fatal("expected error for unknown defaultAgent")
-	}
-}
-
 func TestValidate_ValidConfig(t *testing.T) {
 	cfg := Default()
 	cfg.Repos = []RepoConfig{{Name: "owner/repo", Path: "/tmp/repo"}}
 	cfg.Agents = []AgentConfig{{Name: "claude", Command: "claude"}}
-	cfg.DefaultAgent = "claude"
 	err := cfg.Validate()
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)

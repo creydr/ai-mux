@@ -235,12 +235,12 @@ func (m Model) handleRepoPickerKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if m.pendingSpawn != nil && m.repoPickerCursor < len(m.configuredRepos) {
 			m.pendingSpawn.repo = m.configuredRepos[m.repoPickerCursor]
 			m.repoPickerActive = false
-			if m.defaultAgent != "" {
+			if len(m.agents) == 1 {
 				req := m.pendingSpawn
 				m.pendingSpawn = nil
 				m.view = viewOverview
 				m.rebuildViewport()
-				return m, spawnJiraSessionCmd(m.conn, req.repo, req.itemKey, m.defaultAgent, "", req.contextPrompt)
+				return m, spawnJiraSessionCmd(m.conn, req.repo, req.itemKey, m.agents[0], "", req.contextPrompt)
 			}
 			m.agentCursor = 0
 			m.view = viewAgentPicker

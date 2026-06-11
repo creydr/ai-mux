@@ -74,8 +74,7 @@ type Model struct {
 	sessions      []protocol.SessionPayload
 	sessionCursor int
 	sessionBadge  int
-	agents        []string
-	defaultAgent  string
+	agents []string
 
 	agentCursor       int
 	pendingSpawn      *spawnRequest
@@ -113,7 +112,7 @@ type Model struct {
 	enabledTabs      []tab
 }
 
-func New(conn protocol.Conn, itemsPerRepo int, agents []string, defaultAgent string, jiraEnabled bool, repoNames []string) Model {
+func New(conn protocol.Conn, itemsPerRepo int, agents []string, jiraEnabled bool, repoNames []string) Model {
 	if itemsPerRepo <= 0 {
 		itemsPerRepo = 3
 	}
@@ -134,9 +133,8 @@ func New(conn protocol.Conn, itemsPerRepo int, agents []string, defaultAgent str
 		fullLoaded:      make(map[string]bool),
 		itemsPerRepo:    itemsPerRepo,
 		viewport:        vp,
-		agents:          agents,
-		defaultAgent:    defaultAgent,
-		attachViewport:  avp,
+		agents:         agents,
+		attachViewport: avp,
 		jiraEnabled:     jiraEnabled,
 		configuredRepos: repoNames,
 		enabledTabs:     tabs,
@@ -305,11 +303,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		spawnItem := m.findItem(msg.Ref.Owner+"/"+msg.Ref.Repo, msg.Ref.Number)
 		cp := contextPromptForItem(spawnItem)
 		req := &spawnRequest{repo: msg.Ref.Owner + "/" + msg.Ref.Repo, number: msg.Ref.Number, itemType: string(msg.Ref.Type), contextPrompt: cp}
-		if m.defaultAgent != "" {
+		if len(m.agents) == 1 {
 			m.view = viewOverview
 			m.itemDetail = nil
 			m.rebuildViewport()
-			return m, spawnSessionCmd(m.conn, req.repo, req.number, req.itemType, m.defaultAgent, "", req.contextPrompt)
+			return m, spawnSessionCmd(m.conn, req.repo, req.number, req.itemType, m.agents[0], "", req.contextPrompt)
 		}
 		m.pendingSpawn = req
 		m.agentCursor = 0
@@ -330,9 +328,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.itemDetail = nil
 		if len(m.configuredRepos) == 1 {
 			req := &spawnRequest{repo: m.configuredRepos[0], itemType: string(provider.ItemTypeJira), itemKey: msg.Key, contextPrompt: cp}
-			if m.defaultAgent != "" {
+			if len(m.agents) == 1 {
 				m.rebuildViewport()
-				return m, spawnJiraSessionCmd(m.conn, req.repo, req.itemKey, m.defaultAgent, "", req.contextPrompt)
+				return m, spawnJiraSessionCmd(m.conn, req.repo, req.itemKey, m.agents[0], "", req.contextPrompt)
 			}
 			m.pendingSpawn = req
 			m.agentCursor = 0
