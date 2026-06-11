@@ -1,6 +1,6 @@
 # ai-mux
 
-A terminal-based tool for monitoring multiple GitHub repositories. Watches for new issues, PRs, and review activity with actionable integrations — spawn AI agent sessions to fix issues or review PRs directly from the dashboard.
+A terminal-based tool for monitoring multiple GitHub repositories and Jira boards. Watches for new issues, PRs, and Jira items with actionable integrations — spawn AI agent sessions to fix issues or review PRs directly from the dashboard.
 
 ## Requirements
 
@@ -8,6 +8,7 @@ A terminal-based tool for monitoring multiple GitHub repositories. Watches for n
 - [`gh`](https://cli.github.com/) CLI — GitHub authentication
 - [`tmux`](https://github.com/tmux/tmux) — agent sessions
 - `git` — worktree isolation
+- Optional: [`acli`](https://bobswift.atlassian.net/wiki/spaces/ACLI/) — Atlassian CLI for Jira integration
 - Optional: `notify-send` (Linux) or `osascript` (macOS) for desktop notifications
 
 ## Installation
@@ -43,6 +44,12 @@ agents:
     command: gemini
 
 defaultAgent: claude
+
+# Optional: Jira integration
+jira:
+  jql: "assignee = currentUser() AND resolution = Unresolved"
+  orderBy: "priority DESC, updated DESC"
+  maxResults: 50
 ```
 
 2. Start the daemon:
@@ -91,8 +98,8 @@ ai-mux dashboard
 
 Keyboard shortcuts:
 
-**Item list (Issues/PRs tabs):**
-- `Tab` — switch between Issues, PRs, and Sessions tabs
+**Item list (Issues/PRs/Jira tabs):**
+- `Tab` — switch between tabs (Jira tab appears when configured)
 - Arrow keys — navigate items
 - `Enter` — open item detail view
 - `a` — spawn agent session for selected item
@@ -162,12 +169,19 @@ For running/pending sessions, `attach` opens the tmux session directly. For comp
 | `defaultAgent` | string | — | Default agent for actions |
 | `notifications.desktop.enabled` | bool | `false` | Enable desktop notifications |
 | `notifications.desktop.events` | list | all | Event types to notify on |
+| `jira.jql` | string | — | JQL filter for Jira items (required when `jira` block present) |
+| `jira.orderBy` | string | — | JQL ORDER BY clause |
+| `jira.maxResults` | int | `50` | Max items to fetch per poll |
 | `dashboard.itemsPerRepo` | int | `3` | Items shown per repo before expanding |
 | `daemon.socket` | string | `/tmp/ai-mux.sock` | Unix socket path |
 
+### Jira Integration
+
+When the `jira` block is present in the config, a Jira tab appears in the dashboard between PRs and Sessions. Items are fetched via the `acli` CLI tool using the configured JQL query. Pressing `a` on a Jira item opens a repo picker (or skips it if only one repo is configured), then follows the same agent/worktree flow as Issues and PRs.
+
 ### Worktree Isolation
 
-Every agent session runs in an isolated git worktree at `<repo-path>/.worktrees/<action>-<number>`. This allows multiple agent sessions to run in parallel without interfering with each other or the current checkout. When multiple sessions target the same PR, each gets its own worktree with a unique branch (`ai-mux/<name>`) so they don't conflict. Worktrees with no changes are cleaned up automatically.
+Every agent session runs in an isolated git worktree at `<repo-path>/.worktrees/<action>-<number>`. For Jira items, the pattern is `jira-<agent>-<KEY>`. This allows multiple agent sessions to run in parallel without interfering with each other or the current checkout. When multiple sessions target the same item, each gets its own worktree with a unique branch (`ai-mux/<name>`) so they don't conflict. Worktrees with no changes are cleaned up automatically.
 
 ## Development
 
