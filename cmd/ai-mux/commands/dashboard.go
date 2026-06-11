@@ -32,7 +32,11 @@ func runDashboard(cmd *cobra.Command, args []string) error {
 	for _, a := range cfg.Agents {
 		agentNames = append(agentNames, a.Name)
 	}
-	m := dashboard.New(conn, cfg.Dashboard.ItemsPerRepo, agentNames, cfg.DefaultAgent)
+	var repoNames []string
+	for _, r := range cfg.Repos {
+		repoNames = append(repoNames, r.Name)
+	}
+	m := dashboard.New(conn, cfg.Dashboard.ItemsPerRepo, agentNames, cfg.DefaultAgent, cfg.Jira != nil, repoNames)
 	p := tea.NewProgram(m)
 	if _, err := p.Run(); err != nil {
 		return fmt.Errorf("running dashboard: %w", err)
