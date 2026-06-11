@@ -394,7 +394,7 @@ func (d *Daemon) handleSessionSpawn(cc *clientConn, msg protocol.Message) {
 	}
 
 	wtAction := session.WorktreeAction(payload.WorktreeAction)
-	sess, err := d.sessionMgr.Spawn(payload.Repo, payload.Number, payload.ItemType, payload.Agent, wtAction)
+	sess, err := d.sessionMgr.Spawn(payload.Repo, payload.Number, payload.ItemType, payload.ItemKey, payload.Agent, wtAction)
 	if err != nil {
 		if errors.Is(err, worktree.ErrWorktreeExists) {
 			resp, err := protocol.NewRequest(protocol.MsgWorktreeExists, msg.ID, payload)
@@ -566,6 +566,7 @@ func sessionToPayload(s *session.Session) protocol.SessionPayload {
 		Repo:         s.ItemRepo,
 		Number:       s.ItemNumber,
 		ItemType:     s.ItemType,
+		ItemKey:      s.ItemKey,
 		Agent:        s.Agent,
 		Status:       string(s.Status),
 		WaitingInput: s.WaitingInput,

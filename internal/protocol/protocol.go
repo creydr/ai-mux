@@ -22,6 +22,10 @@ const (
 
 	MsgWorktreeExists MessageType = "worktree_exists"
 
+	MsgListJiraItems   MessageType = "list_jira_items"
+	MsgGetJiraItem     MessageType = "get_jira_item"
+	MsgGetJiraComments MessageType = "get_jira_comments"
+
 	MsgEvent         MessageType = "event"
 	MsgSessionOutput MessageType = "session_output"
 	MsgResponse      MessageType = "response"

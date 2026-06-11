@@ -158,7 +158,7 @@ func (m *Manager) stopMonitor(sessionID string) {
 	}
 }
 
-func (m *Manager) Spawn(itemRepo string, itemNumber int, itemType string, agentName string, wtAction WorktreeAction) (*Session, error) {
+func (m *Manager) Spawn(itemRepo string, itemNumber int, itemType string, itemKey string, agentName string, wtAction WorktreeAction) (*Session, error) {
 	m.mu.Lock()
 
 	active := 0
@@ -183,17 +183,23 @@ func (m *Manager) Spawn(itemRepo string, itemNumber int, itemType string, agentN
 		return nil, fmt.Errorf("repo %q not configured", itemRepo)
 	}
 
-	prefix := "fix"
-	if itemType == string(provider.ItemTypePR) {
-		prefix = "rev"
+	var id string
+	if itemType == string(provider.ItemTypeJira) {
+		id = generateIDForKey("jira", itemKey)
+	} else {
+		prefix := "fix"
+		if itemType == string(provider.ItemTypePR) {
+			prefix = "rev"
+		}
+		id = generateID(prefix, itemNumber)
 	}
-	id := generateID(prefix, itemNumber)
 
 	sess := &Session{
 		ID:          id,
 		ItemRepo:    itemRepo,
 		ItemNumber:  itemNumber,
 		ItemType:    itemType,
+		ItemKey:     itemKey,
 		Agent:       agentName,
 		TmuxSession: tmuxPrefix + id,
 		RepoPath:    repo.Path,
@@ -201,7 +207,12 @@ func (m *Manager) Spawn(itemRepo string, itemNumber int, itemType string, agentN
 		CreatedAt:   time.Now(),
 	}
 
-	wtName := fmt.Sprintf("%s-%s-%d", itemType, sanitizeBranchName(agentName), itemNumber)
+	var wtName string
+	if itemType == string(provider.ItemTypeJira) {
+		wtName = fmt.Sprintf("jira-%s-%s", sanitizeBranchName(agentName), strings.ToLower(itemKey))
+	} else {
+		wtName = fmt.Sprintf("%s-%s-%d", itemType, sanitizeBranchName(agentName), itemNumber)
+	}
 	wtPath, err := m.resolveWorktree(repo.Path, wtName, itemRepo, itemNumber, itemType, wtAction)
 	if err != nil {
 		m.mu.Unlock()
@@ -290,6 +301,15 @@ func (m *Manager) WorktreeExists(itemRepo string, itemNumber int, itemType strin
 		return false
 	}
 	wtName := fmt.Sprintf("%s-%s-%d", itemType, sanitizeBranchName(agentName), itemNumber)
+	return m.worktrees.Exists(repo.Path, wtName)
+}
+
+func (m *Manager) WorktreeExistsForKey(itemRepo string, itemKey string, agentName string) bool {
+	repo, ok := m.repos[itemRepo]
+	if !ok {
+		return false
+	}
+	wtName := fmt.Sprintf("jira-%s-%s", sanitizeBranchName(agentName), strings.ToLower(itemKey))
 	return m.worktrees.Exists(repo.Path, wtName)
 }
 
@@ -490,6 +510,19 @@ func (m *Manager) FindByItem(repo string, number int) *Session {
 
 	for _, s := range m.sessions {
 		if s.ItemRepo == repo && s.ItemNumber == number && s.IsActive() {
+			cp := *s
+			return &cp
+		}
+	}
+	return nil
+}
+
+func (m *Manager) FindByItemKey(key string) *Session {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	for _, s := range m.sessions {
+		if s.ItemKey == key && s.IsActive() {
 			cp := *s
 			return &cp
 		}

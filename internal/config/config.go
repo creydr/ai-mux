@@ -19,6 +19,7 @@ type Config struct {
 	DefaultAgent  string          `yaml:"defaultAgent"`
 	Daemon        DaemonConfig    `yaml:"daemon"`
 	Dashboard     DashboardConfig `yaml:"dashboard"`
+	Jira          *JiraConfig     `yaml:"jira,omitempty"`
 
 	configPath string
 }
@@ -55,6 +56,12 @@ type DaemonConfig struct {
 
 type DashboardConfig struct {
 	ItemsPerRepo int `yaml:"itemsPerRepo"`
+}
+
+type JiraConfig struct {
+	JQL        string `yaml:"jql"`
+	OrderBy    string `yaml:"orderBy"`
+	MaxResults int    `yaml:"maxResults"`
 }
 
 type Duration struct {
@@ -176,6 +183,15 @@ func (c *Config) Validate() error {
 		}
 		if !found {
 			return fmt.Errorf("defaultAgent %q not found in agents list", c.DefaultAgent)
+		}
+	}
+
+	if c.Jira != nil {
+		if c.Jira.JQL == "" {
+			return fmt.Errorf("jira.jql must be set when jira is configured")
+		}
+		if c.Jira.MaxResults <= 0 {
+			c.Jira.MaxResults = 50
 		}
 	}
 

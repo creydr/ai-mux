@@ -77,6 +77,7 @@ type SessionSpawnPayload struct {
 	Number         int    `json:"number"`
 	ItemType       string `json:"item_type"`
 	Agent          string `json:"agent"`
+	ItemKey        string `json:"item_key,omitempty"`
 	WorktreeAction string `json:"worktree_action,omitempty"`
 }
 
@@ -86,6 +87,7 @@ type SessionPayload struct {
 	Repo         string `json:"repo"`
 	Number       int    `json:"number"`
 	ItemType     string `json:"item_type"`
+	ItemKey      string `json:"item_key,omitempty"`
 	Agent        string `json:"agent"`
 	Status       string `json:"status"`
 	WaitingInput bool   `json:"waiting_input"`
@@ -114,4 +116,22 @@ type SessionIDPayload struct {
 type SessionRenamePayload struct {
 	SessionID string `json:"session_id"`
 	Name      string `json:"name"`
+}
+
+type JiraListPayload struct {
+	Offset int `json:"offset,omitempty"`
+	Limit  int `json:"limit,omitempty"`
+}
+
+type JiraItemsPayload struct {
+	Items json.RawMessage `json:"items"`
+	Total int             `json:"total"`
+}
+
+type JiraKeyPayload struct {
+	Key string `json:"key"`
+}
+
+type JiraCommentsPayload struct {
+	Comments json.RawMessage `json:"comments"`
 }
