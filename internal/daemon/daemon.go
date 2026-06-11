@@ -13,6 +13,7 @@ import (
 
 	"github.com/creydr/ai-mux/internal/config"
 	"github.com/creydr/ai-mux/internal/event"
+	"github.com/creydr/ai-mux/internal/jira"
 	"github.com/creydr/ai-mux/internal/poller"
 	"github.com/creydr/ai-mux/internal/protocol"
 	"github.com/creydr/ai-mux/internal/provider"
@@ -29,6 +30,7 @@ type Daemon struct {
 	poller     *poller.Poller
 	listener   protocol.Listener
 	sessionMgr *session.Manager
+	jira       *jiraState
 
 	clients   map[string]*clientConn
 	clientsMu sync.RWMutex
@@ -81,6 +83,13 @@ func New(cfg *config.Config, prov provider.Provider, st store.Store, transport p
 		sessMgr.Reconcile()
 	}
 
+	var js *jiraState
+	if cfg.Jira != nil {
+		js = &jiraState{
+			client: jira.NewClient(),
+		}
+	}
+
 	d := &Daemon{
 		config:     cfg,
 		provider:   prov,
@@ -89,6 +98,7 @@ func New(cfg *config.Config, prov provider.Provider, st store.Store, transport p
 		poller:     p,
 		listener:   ln,
 		sessionMgr: sessMgr,
+		jira:       js,
 		clients:    make(map[string]*clientConn),
 	}
 
@@ -116,6 +126,10 @@ func (d *Daemon) Start(ctx context.Context) error {
 			log.Printf("poller error: %v", err)
 		}
 	}()
+
+	if d.jira != nil {
+		go d.pollJira(ctx)
+	}
 
 	go d.acceptLoop(ctx)
 
@@ -235,6 +249,12 @@ func (d *Daemon) handleMessage(cc *clientConn, msg protocol.Message) {
 		d.handleSessionInput(cc, msg)
 	case protocol.MsgSessionRename:
 		d.handleSessionRename(cc, msg)
+	case protocol.MsgListJiraItems:
+		d.handleListJiraItems(cc, msg)
+	case protocol.MsgGetJiraItem:
+		d.handleGetJiraItem(cc, msg)
+	case protocol.MsgGetJiraComments:
+		d.handleGetJiraComments(cc, msg)
 	default:
 		resp, _ := protocol.NewError(msg.ID, fmt.Sprintf("unknown message type: %s", msg.Type))
 		cc.send(resp)
