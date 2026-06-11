@@ -125,6 +125,7 @@ Keyboard shortcuts:
 - `Ctrl-c` — quit
 
 **Attached session view:**
+- `p` — paste context prompt into the agent (types without submitting, so you can edit first)
 - `n` — rename session (pre-filled with current name)
 - `PgUp` / `PgDn` — scroll output
 - `Esc` — back
