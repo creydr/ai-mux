@@ -12,7 +12,9 @@ import (
 	"syscall"
 	"text/template"
 
+	"github.com/creydr/ai-mux/internal/config"
 	"github.com/creydr/ai-mux/internal/daemon"
+	"github.com/creydr/ai-mux/internal/depcheck"
 	"github.com/creydr/ai-mux/internal/protocol"
 	"github.com/creydr/ai-mux/internal/protocol/jsonlines"
 	"github.com/creydr/ai-mux/internal/provider/github"
@@ -76,6 +78,20 @@ func stateFilePath() string {
 	return filepath.Join(home, ".local", "state", "ai-mux", "state.json")
 }
 
+func checkDeps(cfg *config.Config) error {
+	deps := []depcheck.Dependency{
+		{Name: "tmux", Reason: "required for agent sessions"},
+		{Name: "git", Reason: "required for worktree management"},
+	}
+	if cfg.GitHub.TokenFrom == "gh" {
+		deps = append(deps, depcheck.Dependency{Name: "gh", Reason: "required for GitHub authentication"})
+	}
+	if cfg.Jira != nil {
+		deps = append(deps, depcheck.Dependency{Name: "acli", Reason: "required for Jira integration"})
+	}
+	return depcheck.Check(deps)
+}
+
 func runDaemonStart(cmd *cobra.Command, args []string) error {
 	if background && os.Getenv("AI_MUX_DAEMON") == "" {
 		return startInBackground(cmd)
@@ -83,6 +99,10 @@ func runDaemonStart(cmd *cobra.Command, args []string) error {
 
 	cfg, err := loadConfig()
 	if err != nil {
+		return err
+	}
+
+	if err := checkDeps(cfg); err != nil {
 		return err
 	}
 
