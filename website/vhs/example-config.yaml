@@ -1,0 +1,16 @@
+repos:
+  - name: acme/backend
+    path: ~/development/backend
+  - name: acme/frontend
+    path: ~/development/frontend
+
+pollInterval: 30s
+
+github:
+  tokenFrom: gh
+
+agents:
+  - name: Claude
+    command: claude
+  - name: Gemini
+    command: gemini
