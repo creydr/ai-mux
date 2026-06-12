@@ -66,4 +66,8 @@ var (
 
 	attachSeparatorStyle = lipgloss.NewStyle().
 				Foreground(lipgloss.Color("#444444"))
+
+	searchBarStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#61AFEF")).
+			Bold(true)
 )

@@ -128,6 +128,7 @@ func TestModel_NavigateDown(t *testing.T) {
 	m := New(nil, 3, nil, false, nil)
 	issues, _ := testItems()
 	m.issues = issues
+	m.fullLoaded["o/r"] = true
 
 	updated, _ := m.Update(tea.KeyPressMsg{Code: 'j'})
 	m = updated.(Model)
@@ -1558,4 +1559,337 @@ func contains(s, sub string) bool {
 		}
 	}
 	return false
+}
+
+func TestModel_SearchActivation(t *testing.T) {
+	m := New(nil, 3, nil, false, nil)
+	issues, _ := testItems()
+	m.issues = issues
+	m.fullLoaded["o/r"] = true
+
+	updated, _ := m.Update(tea.KeyPressMsg{Code: ':'})
+	m = updated.(Model)
+
+	if !m.searchActive {
+		t.Fatal(": should activate search")
+	}
+	if m.searchInput != "" {
+		t.Error("search input should start empty")
+	}
+
+	updated, _ = m.Update(tea.KeyPressMsg{Code: 'b', Text: "b"})
+	m = updated.(Model)
+	if m.searchInput != "b" {
+		t.Errorf("expected search input 'b', got %q", m.searchInput)
+	}
+}
+
+func TestModel_SearchFiltersItems(t *testing.T) {
+	m := New(nil, 3, nil, false, nil)
+	issues, _ := testItems()
+	m.issues = issues
+	m.fullLoaded["o/r"] = true
+	m.width = 80
+	m.height = 40
+
+	updated, _ := m.Update(tea.KeyPressMsg{Code: ':'})
+	m = updated.(Model)
+
+	for _, ch := range "Bug" {
+		updated, _ = m.Update(tea.KeyPressMsg{Code: ch, Text: string(ch)})
+		m = updated.(Model)
+	}
+
+	filtered := m.filteredItems()
+	if len(filtered) != 1 {
+		t.Errorf("expected 1 filtered item for 'Bug', got %d", len(filtered))
+	}
+	if filtered[0].Title != "Bug report" {
+		t.Errorf("expected 'Bug report', got %q", filtered[0].Title)
+	}
+}
+
+func TestModel_SearchEscapeRestoresCursor(t *testing.T) {
+	m := New(nil, 3, nil, false, nil)
+	issues, _ := testItems()
+	m.issues = issues
+	m.fullLoaded["o/r"] = true
+	m.cursor = 1
+
+	updated, _ := m.Update(tea.KeyPressMsg{Code: ':'})
+	m = updated.(Model)
+
+	updated, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyDown})
+	m = updated.(Model)
+
+	updated, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+	m = updated.(Model)
+
+	if m.searchActive {
+		t.Error("search should be deactivated")
+	}
+	if m.cursor != 1 {
+		t.Errorf("cursor should be restored to 1, got %d", m.cursor)
+	}
+}
+
+func TestModel_SearchEnterCommitsFilter(t *testing.T) {
+	m := New(nil, 3, nil, false, nil)
+	issues, _ := testItems()
+	m.issues = issues
+	m.fullLoaded["o/r"] = true
+
+	updated, _ := m.Update(tea.KeyPressMsg{Code: ':'})
+	m = updated.(Model)
+
+	updated, _ = m.Update(tea.KeyPressMsg{Code: 'B', Text: "B"})
+	m = updated.(Model)
+
+	updated, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	m = updated.(Model)
+
+	if m.searchActive {
+		t.Error("search bar should be hidden after Enter")
+	}
+	if !m.searchCommitted {
+		t.Error("search should be committed after Enter")
+	}
+	if m.searchInput != "B" {
+		t.Error("search input should be preserved after commit")
+	}
+}
+
+func TestModel_SearchCommittedEscapeClears(t *testing.T) {
+	m := New(nil, 3, nil, false, nil)
+	issues, _ := testItems()
+	m.issues = issues
+	m.fullLoaded["o/r"] = true
+	m.searchCommitted = true
+	m.searchInput = "Bug"
+
+	updated, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+	m = updated.(Model)
+
+	if m.searchCommitted {
+		t.Error("Escape should clear committed search")
+	}
+	if m.searchInput != "" {
+		t.Error("search input should be cleared")
+	}
+}
+
+func TestModel_SearchFiltersJira(t *testing.T) {
+	m := New(nil, 3, nil, true, nil)
+	m.activeTab = tabJira
+	m.jiraItems = []provider.JiraItem{
+		{Key: "PROJ-1", Summary: "Fix login bug"},
+		{Key: "PROJ-2", Summary: "Add dashboard"},
+		{Key: "TEST-1", Summary: "Unit tests"},
+	}
+
+	updated, _ := m.Update(tea.KeyPressMsg{Code: ':'})
+	m = updated.(Model)
+
+	for _, ch := range "PROJ" {
+		updated, _ = m.Update(tea.KeyPressMsg{Code: ch, Text: string(ch)})
+		m = updated.(Model)
+	}
+
+	filtered := m.filteredJiraItems()
+	if len(filtered) != 2 {
+		t.Errorf("expected 2 filtered Jira items for 'PROJ', got %d", len(filtered))
+	}
+}
+
+func TestModel_SearchFiltersSessions(t *testing.T) {
+	m := New(nil, 3, nil, false, nil)
+	m.activeTab = tabSessions
+	m.sessions = testSessions()
+
+	updated, _ := m.Update(tea.KeyPressMsg{Code: ':'})
+	m = updated.(Model)
+
+	for _, ch := range "fix" {
+		updated, _ = m.Update(tea.KeyPressMsg{Code: ch, Text: string(ch)})
+		m = updated.(Model)
+	}
+
+	filtered := m.filteredSessions()
+	if len(filtered) != 1 {
+		t.Errorf("expected 1 filtered session for 'fix', got %d", len(filtered))
+	}
+}
+
+func TestModel_AllRowVisible(t *testing.T) {
+	m := New(nil, 2, nil, false, nil)
+	m.issues = multiRepoItems(2)
+	m.updateRepoList()
+	m.width = 80
+	m.height = 40
+	m.rebuildViewport()
+
+	view := m.View()
+	if !containsString(view.Content, "[All...]") {
+		t.Error("should show [All...] for repos not fully loaded")
+	}
+}
+
+func TestModel_AllRowHiddenWhenFullLoaded(t *testing.T) {
+	m := New(nil, 2, nil, false, nil)
+	m.issues = multiRepoItems(5)
+	m.updateRepoList()
+	m.fullLoaded["a/alpha"] = true
+	m.fullLoaded["b/beta"] = true
+
+	rows := m.visibleItems()
+	for _, r := range rows {
+		if r.allRepo != "" {
+			t.Error("should not have [All...] row when fully loaded")
+		}
+	}
+}
+
+func TestModel_SearchBarVisible(t *testing.T) {
+	m := New(nil, 3, nil, false, nil)
+	issues, _ := testItems()
+	m.issues = issues
+	m.fullLoaded["o/r"] = true
+	m.width = 80
+	m.height = 40
+
+	updated, _ := m.Update(tea.KeyPressMsg{Code: ':'})
+	m = updated.(Model)
+
+	m.rebuildViewport()
+	view := m.View()
+	if !containsString(view.Content, ">") {
+		t.Error("search bar should show > prompt")
+	}
+}
+
+func TestModel_SearchStatusBar(t *testing.T) {
+	m := New(nil, 3, nil, false, nil)
+	m.searchActive = true
+	text := m.statusBarText()
+	if !containsString(text, "esc: cancel") {
+		t.Error("search mode status bar should show cancel hint")
+	}
+}
+
+func TestModel_SearchClearsOnTabSwitch(t *testing.T) {
+	m := New(nil, 3, nil, false, nil)
+	m.searchActive = true
+	m.searchInput = "test"
+
+	updated, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyTab})
+	m = updated.(Model)
+
+	if m.searchActive {
+		t.Error("search should be cleared on tab switch")
+	}
+	if m.searchInput != "" {
+		t.Error("search input should be cleared on tab switch")
+	}
+}
+
+func TestModel_SearchBackspace(t *testing.T) {
+	m := New(nil, 3, nil, false, nil)
+	m.issues = []provider.Item{
+		{ID: "o/r/issues/1", Number: 1, Title: "Bug", Type: provider.ItemTypeIssue, Repo: provider.RepoRef{Owner: "o", Repo: "r"}},
+	}
+	m.fullLoaded["o/r"] = true
+
+	updated, _ := m.Update(tea.KeyPressMsg{Code: ':'})
+	m = updated.(Model)
+
+	updated, _ = m.Update(tea.KeyPressMsg{Code: 'a', Text: "a"})
+	m = updated.(Model)
+	updated, _ = m.Update(tea.KeyPressMsg{Code: 'b', Text: "b"})
+	m = updated.(Model)
+
+	if m.searchInput != "ab" {
+		t.Fatalf("expected 'ab', got %q", m.searchInput)
+	}
+
+	updated, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyBackspace})
+	m = updated.(Model)
+
+	if m.searchInput != "a" {
+		t.Errorf("expected 'a' after backspace, got %q", m.searchInput)
+	}
+}
+
+func TestModel_SearchNavigateWithArrows(t *testing.T) {
+	m := New(nil, 3, nil, false, nil)
+	issues, _ := testItems()
+	m.issues = issues
+	m.fullLoaded["o/r"] = true
+	m.width = 80
+	m.height = 40
+
+	updated, _ := m.Update(tea.KeyPressMsg{Code: ':'})
+	m = updated.(Model)
+
+	if m.cursor != 0 {
+		t.Fatalf("cursor should start at 0, got %d", m.cursor)
+	}
+
+	updated, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyDown})
+	m = updated.(Model)
+	if m.cursor != 1 {
+		t.Errorf("arrow down should move cursor to 1, got %d", m.cursor)
+	}
+
+	updated, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyUp})
+	m = updated.(Model)
+	if m.cursor != 0 {
+		t.Errorf("arrow up should move cursor to 0, got %d", m.cursor)
+	}
+}
+
+func TestModel_SearchJKeyDoesNotNavigate(t *testing.T) {
+	m := New(nil, 3, nil, false, nil)
+	issues, _ := testItems()
+	m.issues = issues
+	m.fullLoaded["o/r"] = true
+
+	updated, _ := m.Update(tea.KeyPressMsg{Code: ':'})
+	m = updated.(Model)
+
+	updated, _ = m.Update(tea.KeyPressMsg{Code: 'j', Text: "j"})
+	m = updated.(Model)
+
+	if m.cursor != 0 {
+		t.Error("j should type into search, not navigate")
+	}
+	if m.searchInput != "j" {
+		t.Errorf("expected search input 'j', got %q", m.searchInput)
+	}
+}
+
+func TestModel_SearchEnterEmptyClears(t *testing.T) {
+	m := New(nil, 3, nil, false, nil)
+	m.searchActive = true
+	m.searchInput = ""
+
+	updated, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	m = updated.(Model)
+
+	if m.searchActive {
+		t.Error("Enter with empty input should deactivate search")
+	}
+	if m.searchCommitted {
+		t.Error("Enter with empty input should not commit")
+	}
+}
+
+func TestModel_HelpShowsSearchBinding(t *testing.T) {
+	m := New(nil, 3, nil, false, nil)
+	m.width = 80
+	m.view = viewHelp
+
+	view := m.View()
+	if !containsString(view.Content, "Search") {
+		t.Error("help should show search keybinding")
+	}
 }

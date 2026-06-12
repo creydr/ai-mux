@@ -31,6 +31,9 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if msg.Code == 'c' && msg.Mod.Contains(tea.ModCtrl) {
 		return m, tea.Quit
 	}
+	if m.searchActive {
+		return m.handleSearchKey(msg)
+	}
 	if m.renameActive {
 		return m.handleRenameKey(msg)
 	}
@@ -59,6 +62,13 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, cmd
 	}
 
+	if m.searchCommitted && msg.Code == tea.KeyEscape {
+		m.searchCommitted = false
+		m.searchInput = ""
+		m.rebuildViewport()
+		return m, nil
+	}
+
 	switch {
 	case msg.Code == 'h' || msg.Code == tea.KeyLeft:
 		m.focusPanel = panelRepos
@@ -79,6 +89,9 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.cursor = 0
 		m.sessionCursor = 0
 		m.expanded = make(map[string]bool)
+		m.searchActive = false
+		m.searchCommitted = false
+		m.searchInput = ""
 		switch m.activeTab {
 		case tabIssues:
 			m.issueBadge = 0
@@ -111,7 +124,7 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		} else if m.activeTab == tabJira {
 			maxIdx := len(m.jiraItems) - 1
 			if m.jiraHasMore {
-				maxIdx++
+				maxIdx += 2
 			}
 			if m.jiraCursor < maxIdx {
 				m.jiraCursor++
@@ -155,7 +168,12 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case msg.Code == tea.KeyEnter:
 		if m.activeTab == tabJira {
-			if m.jiraCursor >= len(m.jiraItems) && m.jiraHasMore {
+			if m.jiraCursor == len(m.jiraItems) && m.jiraHasMore {
+				return m, fetchJiraItemsCmd(m.conn, m.jiraOffset, 0)
+			}
+			if m.jiraCursor == len(m.jiraItems)+1 && m.jiraHasMore {
+				m.loadingAllJira = true
+				m.rebuildViewport()
 				return m, fetchJiraItemsCmd(m.conn, m.jiraOffset, 0)
 			}
 			item := m.selectedJiraItem()
@@ -208,6 +226,19 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			}
 			m.expanded[repo] = true
 			m.rebuildViewport()
+			return m, nil
+		}
+		allRepo := m.allRepoAtCursor()
+		if allRepo != "" {
+			if !m.fullLoaded[allRepo] && m.conn != nil {
+				m.loadingAllRepos[allRepo] = true
+				itemType := provider.ItemTypeIssue
+				if m.activeTab == tabPRs {
+					itemType = provider.ItemTypePR
+				}
+				m.rebuildViewport()
+				return m, expandRepoCmd(m.conn, allRepo, itemType, 0)
+			}
 			return m, nil
 		}
 		item := m.selectedItem()
@@ -395,9 +426,130 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return m, fetchItemsCmd(m.conn, m.itemsPerRepo)
 		}
 		return m, nil
+	case msg.Code == ':':
+		m.searchActive = true
+		m.searchInput = ""
+		m.searchCommitted = false
+		m.preCursorPos = m.cursor
+		m.preJiraCursor = m.jiraCursor
+		m.preSessionCursor = m.sessionCursor
+		m.rebuildViewport()
+		return m, nil
 	case msg.Code == '?':
 		m.view = viewHelp
 		return m, nil
 	}
 	return m, nil
+}
+
+func (m Model) handleSearchKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	switch {
+	case msg.Code == tea.KeyTab:
+		m.searchActive = false
+		m.searchCommitted = false
+		m.searchInput = ""
+		return m.handleKey(msg)
+	case msg.Code == tea.KeyEscape:
+		m.searchActive = false
+		m.searchCommitted = false
+		m.searchInput = ""
+		m.cursor = m.preCursorPos
+		m.jiraCursor = m.preJiraCursor
+		m.sessionCursor = m.preSessionCursor
+		m.rebuildViewport()
+		return m, nil
+	case msg.Code == tea.KeyEnter:
+		if m.searchInput == "" {
+			m.searchActive = false
+			m.searchCommitted = false
+		} else {
+			m.searchActive = false
+			m.searchCommitted = true
+		}
+		m.rebuildViewport()
+		return m, nil
+	case msg.Code == tea.KeyBackspace:
+		if len(m.searchInput) > 0 {
+			m.searchInput = m.searchInput[:len(m.searchInput)-1]
+		}
+		m.clampSearchCursor()
+		m.rebuildViewport()
+		return m, nil
+	case msg.Code == tea.KeyUp:
+		m.moveSearchCursor(-1)
+		m.rebuildViewport()
+		return m, nil
+	case msg.Code == tea.KeyDown:
+		m.moveSearchCursor(1)
+		m.rebuildViewport()
+		return m, nil
+	default:
+		if msg.Text != "" {
+			m.searchInput += msg.Text
+			m.clampSearchCursor()
+			m.rebuildViewport()
+		}
+		return m, nil
+	}
+}
+
+func (m *Model) clampSearchCursor() {
+	switch m.activeTab {
+	case tabSessions:
+		maxIdx := len(m.filteredSessions()) - 1
+		if maxIdx < 0 {
+			maxIdx = 0
+		}
+		if m.sessionCursor > maxIdx {
+			m.sessionCursor = maxIdx
+		}
+	case tabJira:
+		maxIdx := len(m.filteredJiraItems()) - 1
+		if maxIdx < 0 {
+			maxIdx = 0
+		}
+		if m.jiraCursor > maxIdx {
+			m.jiraCursor = maxIdx
+		}
+	default:
+		maxIdx := len(m.visibleItems()) - 1
+		if maxIdx < 0 {
+			maxIdx = 0
+		}
+		if m.cursor > maxIdx {
+			m.cursor = maxIdx
+		}
+	}
+}
+
+func (m *Model) moveSearchCursor(delta int) {
+	switch m.activeTab {
+	case tabSessions:
+		m.sessionCursor += delta
+		maxIdx := len(m.filteredSessions()) - 1
+		if m.sessionCursor < 0 {
+			m.sessionCursor = 0
+		}
+		if maxIdx >= 0 && m.sessionCursor > maxIdx {
+			m.sessionCursor = maxIdx
+		}
+	case tabJira:
+		m.jiraCursor += delta
+		maxIdx := len(m.filteredJiraItems()) - 1
+		if m.jiraCursor < 0 {
+			m.jiraCursor = 0
+		}
+		if maxIdx >= 0 && m.jiraCursor > maxIdx {
+			m.jiraCursor = maxIdx
+		}
+	default:
+		m.cursor += delta
+		maxIdx := len(m.visibleItems()) - 1
+		if m.cursor < 0 {
+			m.cursor = 0
+		}
+		if maxIdx >= 0 && m.cursor > maxIdx {
+			m.cursor = maxIdx
+		}
+	}
 }

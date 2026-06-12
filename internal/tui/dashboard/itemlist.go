@@ -12,6 +12,7 @@ import (
 type visibleRow struct {
 	item       *provider.Item
 	expandRepo string
+	allRepo    string
 	isHeader   bool
 	text       string
 }
@@ -45,11 +46,14 @@ func buildVisibleRows(items []provider.Item, itemsPerRepo int, expanded map[stri
 		if showExpand {
 			rows = append(rows, visibleRow{expandRepo: g.repo})
 		}
+		if !fullLoaded[g.repo] {
+			rows = append(rows, visibleRow{allRepo: g.repo})
+		}
 	}
 	return rows
 }
 
-func buildContentLines(items []provider.Item, cursor, width, itemsPerRepo int, expanded map[string]bool, selectedRepo string, fullLoaded map[string]bool, sessions []protocol.SessionPayload) ([]string, int) {
+func buildContentLines(items []provider.Item, cursor, width, itemsPerRepo int, expanded map[string]bool, selectedRepo string, fullLoaded map[string]bool, sessions []protocol.SessionPayload, loadingAll map[string]bool) ([]string, int) {
 	rows := buildVisibleRows(items, itemsPerRepo, expanded, selectedRepo, fullLoaded)
 
 	sessionMap := make(map[string]*protocol.SessionPayload)
@@ -95,6 +99,20 @@ func buildContentLines(items []provider.Item, cursor, width, itemsPerRepo int, e
 				label = fmt.Sprintf("    [+%d more]", remaining)
 			} else {
 				label = "    [more...]"
+			}
+			if rowIdx == cursor {
+				cursorLine = len(lines)
+				lines = append(lines, selectedItemStyle.Width(width).Render(label))
+			} else {
+				lines = append(lines, normalItemStyle.Render(label))
+			}
+			rowIdx++
+		} else if r.allRepo != "" {
+			var label string
+			if loadingAll[r.allRepo] {
+				label = "    [Loading...]"
+			} else {
+				label = "    [All...]"
 			}
 			if rowIdx == cursor {
 				cursorLine = len(lines)
@@ -263,7 +281,7 @@ func countRepoItems(items []provider.Item, repo string) int {
 	return count
 }
 
-func buildJiraContentLines(items []provider.JiraItem, cursor, width int, hasMore bool, sessions []protocol.SessionPayload) ([]string, int) {
+func buildJiraContentLines(items []provider.JiraItem, cursor, width int, hasMore bool, sessions []protocol.SessionPayload, total int, loadingAllJira bool) ([]string, int) {
 	if len(items) == 0 {
 		return []string{statusBarStyle.Render("  No Jira items")}, 0
 	}
@@ -341,6 +359,20 @@ func buildJiraContentLines(items []provider.JiraItem, cursor, width int, hasMore
 			lines = append(lines, selectedItemStyle.Width(width).Render(label))
 		} else {
 			lines = append(lines, normalItemStyle.Render(label))
+		}
+
+		var allLabel string
+		if loadingAllJira {
+			allLabel = fmt.Sprintf("    [Loading... (%d/%d)]", len(items), total)
+		} else {
+			allLabel = fmt.Sprintf("    [All... (%d items)]", total)
+		}
+		allIdx := idx + 1
+		if allIdx == cursor {
+			cursorLine = len(lines)
+			lines = append(lines, selectedItemStyle.Width(width).Render(allLabel))
+		} else {
+			lines = append(lines, normalItemStyle.Render(allLabel))
 		}
 	}
 

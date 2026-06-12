@@ -110,6 +110,17 @@ type Model struct {
 	repoPickerActive bool
 	repoPickerCursor int
 	enabledTabs      []tab
+
+	searchActive     bool
+	searchInput      string
+	searchCommitted  bool
+	preCursorPos     int
+	preJiraCursor    int
+	preSessionCursor int
+
+	jiraTotal       int
+	loadingAllRepos map[string]bool
+	loadingAllJira  bool
 }
 
 func New(conn protocol.Conn, itemsPerRepo int, agents []string, jiraEnabled bool, repoNames []string) Model {
@@ -131,6 +142,7 @@ func New(conn protocol.Conn, itemsPerRepo int, agents []string, jiraEnabled bool
 		focusPanel:      panelItems,
 		expanded:        make(map[string]bool),
 		fullLoaded:      make(map[string]bool),
+		loadingAllRepos: make(map[string]bool),
 		itemsPerRepo:    itemsPerRepo,
 		viewport:        vp,
 		agents:          agents,
@@ -188,6 +200,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.rebuildViewport()
 		return m, nil
 	case repoExpandedMsg:
+		delete(m.loadingAllRepos, msg.repo)
 		m.mergeExpandedItems(msg)
 		m.rebuildViewport()
 		return m, nil
@@ -268,7 +281,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.jiraHasMore = len(m.jiraItems) < msg.total
 		m.jiraOffset = msg.offset + len(msg.items)
+		m.jiraTotal = msg.total
 		m.rebuildViewport()
+		if m.loadingAllJira && m.jiraHasMore && m.conn != nil {
+			return m, fetchJiraItemsCmd(m.conn, m.jiraOffset, 0)
+		}
+		m.loadingAllJira = false
 		return m, nil
 	case statusTickMsg:
 		if msg.id == m.statusTickID && time.Now().After(msg.due) {
@@ -474,12 +492,16 @@ func (m *Model) rebuildViewport() {
 		width = 80
 	}
 
+	searching := m.searchActive || m.searchCommitted
+
 	if m.activeTab == tabJira {
 		m.viewport.SetWidth(width)
 		m.viewport.SetHeight(vpHeight)
-		maxCursor := len(m.jiraItems) - 1
-		if m.jiraHasMore {
-			maxCursor++
+		jiraItems := m.filteredJiraItems()
+		showMore := m.jiraHasMore && !searching
+		maxCursor := len(jiraItems) - 1
+		if showMore {
+			maxCursor += 2
 		}
 		if m.jiraCursor > maxCursor {
 			m.jiraCursor = maxCursor
@@ -487,13 +509,24 @@ func (m *Model) rebuildViewport() {
 		if m.jiraCursor < 0 {
 			m.jiraCursor = 0
 		}
-		lines, cursorLine := buildJiraContentLines(m.jiraItems, m.jiraCursor, width, m.jiraHasMore, m.sessions)
+		lines, cursorLine := buildJiraContentLines(jiraItems, m.jiraCursor, width, showMore, m.sessions, m.jiraTotal, m.loadingAllJira)
+		if m.searchActive {
+			searchLine := searchBarStyle.Render("> " + m.searchInput + "█")
+			lines = append([]string{searchLine}, lines...)
+			cursorLine++
+		}
 		m.viewport.SetContentLines(lines)
 		m.cursorLine = cursorLine
 	} else if m.activeTab == tabSessions {
 		m.viewport.SetWidth(width)
 		m.viewport.SetHeight(vpHeight)
-		lines, cursorLine := buildSessionLines(m.sessions, m.sessionCursor, width, m.sessionScrollPos)
+		sessions := m.filteredSessions()
+		lines, cursorLine := buildSessionLines(sessions, m.sessionCursor, width, m.sessionScrollPos)
+		if m.searchActive {
+			searchLine := searchBarStyle.Render("> " + m.searchInput + "█")
+			lines = append([]string{searchLine}, lines...)
+			cursorLine++
+		}
 		m.viewport.SetContentLines(lines)
 		m.cursorLine = cursorLine
 	} else {
@@ -504,8 +537,13 @@ func (m *Model) rebuildViewport() {
 		m.viewport.SetWidth(listWidth)
 		m.viewport.SetHeight(vpHeight)
 
-		items := m.currentItems()
-		lines, cursorLine := buildContentLines(items, m.cursor, listWidth, m.itemsPerRepo, m.expanded, m.selectedRepo, m.fullLoaded, m.sessions)
+		items := m.filteredItems()
+		lines, cursorLine := buildContentLines(items, m.cursor, listWidth, m.itemsPerRepo, m.expanded, m.selectedRepo, m.fullLoaded, m.sessions, m.loadingAllRepos)
+		if m.searchActive {
+			searchLine := searchBarStyle.Render("> " + m.searchInput + "█")
+			lines = append([]string{searchLine}, lines...)
+			cursorLine++
+		}
 		m.viewport.SetContentLines(lines)
 		m.cursorLine = cursorLine
 	}

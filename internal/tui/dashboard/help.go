@@ -43,6 +43,7 @@ func (m Model) renderHelp() tea.View {
 		{"l / →", "Focus item panel"},
 		{"Tab", "Switch tab"},
 		{"Enter", "Select / expand"},
+		{":", "Search / filter"},
 	})
 
 	section("Issues & Pull Requests", [][2]string{

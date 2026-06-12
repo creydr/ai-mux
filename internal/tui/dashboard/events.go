@@ -1,6 +1,7 @@
 package dashboard
 
 import (
+	"fmt"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -103,6 +104,20 @@ func (m *Model) scheduleStatusClear() tea.Cmd {
 }
 
 func (m Model) statusBarText() string {
+	if m.searchActive {
+		return "↑/↓: navigate | enter: apply | esc: cancel"
+	}
+	if m.searchCommitted {
+		return fmt.Sprintf("filter: %q | :: search | esc: clear", m.searchInput)
+	}
+	for repo := range m.loadingAllRepos {
+		if m.loadingAllRepos[repo] {
+			return fmt.Sprintf("Loading all items for %s...", repo)
+		}
+	}
+	if m.loadingAllJira {
+		return fmt.Sprintf("Loading Jira items... (%d/%d)", len(m.jiraItems), m.jiraTotal)
+	}
 	if m.renameActive {
 		return "enter: confirm | esc: cancel"
 	}
