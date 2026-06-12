@@ -74,7 +74,7 @@ type Model struct {
 	sessions      []protocol.SessionPayload
 	sessionCursor int
 	sessionBadge  int
-	agents []string
+	agents        []string
 
 	agentCursor       int
 	pendingSpawn      *spawnRequest
@@ -133,8 +133,8 @@ func New(conn protocol.Conn, itemsPerRepo int, agents []string, jiraEnabled bool
 		fullLoaded:      make(map[string]bool),
 		itemsPerRepo:    itemsPerRepo,
 		viewport:        vp,
-		agents:         agents,
-		attachViewport: avp,
+		agents:          agents,
+		attachViewport:  avp,
 		jiraEnabled:     jiraEnabled,
 		configuredRepos: repoNames,
 		enabledTabs:     tabs,

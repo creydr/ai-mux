@@ -15,8 +15,8 @@ type Config struct {
 	PollInterval  Duration        `yaml:"pollInterval"`
 	GitHub        GitHubConfig    `yaml:"github"`
 	Notifications NotifyConfig    `yaml:"notifications"`
-	Agents    []AgentConfig   `yaml:"agents"`
-	Daemon    DaemonConfig    `yaml:"daemon"`
+	Agents        []AgentConfig   `yaml:"agents"`
+	Daemon        DaemonConfig    `yaml:"daemon"`
 	Dashboard     DashboardConfig `yaml:"dashboard"`
 	Jira          *JiraConfig     `yaml:"jira,omitempty"`
 
