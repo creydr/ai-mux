@@ -260,6 +260,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.statusText = "Session stopped"
 		m.rebuildViewport()
 		return m, m.scheduleStatusClear()
+	case sessionRemovedMsg:
+		for i, s := range m.sessions {
+			if s.ID == msg.sessionID {
+				m.sessions = append(m.sessions[:i], m.sessions[i+1:]...)
+				if m.sessionCursor >= len(m.sessions) && m.sessionCursor > 0 {
+					m.sessionCursor--
+				}
+				break
+			}
+		}
+		m.statusText = "Session removed"
+		m.rebuildViewport()
+		return m, m.scheduleStatusClear()
 	case statusMsg:
 		m.statusText = msg.text
 		return m, m.scheduleStatusClear()

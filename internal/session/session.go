@@ -15,6 +15,7 @@ const (
 	StatusCompleted Status = "completed"
 	StatusFailed    Status = "failed"
 	StatusStopped   Status = "stopped"
+	StatusRemoved   Status = "removed"
 )
 
 type Session struct {

@@ -19,6 +19,7 @@ const (
 	MsgSessionInput     MessageType = "session_input"
 	MsgSessionStop      MessageType = "session_stop"
 	MsgSessionRename    MessageType = "session_rename"
+	MsgSessionRemove    MessageType = "session_remove"
 	MsgSessionTypeInput MessageType = "session.type_input"
 
 	MsgWorktreeExists MessageType = "worktree_exists"

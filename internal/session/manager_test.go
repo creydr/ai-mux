@@ -635,6 +635,92 @@ func TestManager_Rename_NotFound(t *testing.T) {
 	}
 }
 
+func TestManager_Remove_ActiveSession(t *testing.T) {
+	mgr, mock := testManager(t)
+
+	sess, err := mgr.Spawn("owner/repo", 42, "issue", "", "claude", "", "")
+	if err != nil {
+		t.Fatalf("Spawn failed: %v", err)
+	}
+
+	if err := mgr.Remove(sess.ID); err != nil {
+		t.Fatalf("Remove failed: %v", err)
+	}
+
+	_, err = mgr.Get(sess.ID)
+	if err == nil {
+		t.Error("removed session should not be found in manager")
+	}
+
+	sessions := mgr.List()
+	if len(sessions) != 0 {
+		t.Errorf("expected 0 sessions after remove, got %d", len(sessions))
+	}
+
+	mock.mu.Lock()
+	if mock.sessions[sess.TmuxSession] {
+		t.Error("tmux session should have been killed")
+	}
+	mock.mu.Unlock()
+}
+
+func TestManager_Remove_NotInManager(t *testing.T) {
+	mgr, _ := testManager(t)
+
+	err := mgr.Remove("nonexistent-session")
+	if err != nil {
+		t.Fatalf("Remove of unknown session should succeed, got: %v", err)
+	}
+}
+
+func TestManager_Remove_StatusCallback(t *testing.T) {
+	var statusUpdates []*Session
+	var mu sync.Mutex
+
+	mock := newMockTmux()
+	mgr := NewManager(ManagerConfig{
+		Agents: []config.AgentConfig{
+			{Name: "claude", Command: "claude"},
+		},
+		Repos:       []config.RepoConfig{{Name: "owner/repo", Path: "/tmp/test-repo"}},
+		OutputDir:   t.TempDir(),
+		MaxParallel: 5,
+		OnStatus: func(sess *Session) {
+			mu.Lock()
+			statusUpdates = append(statusUpdates, sess)
+			mu.Unlock()
+		},
+	})
+	mgr.SetTmux(mock)
+	mgr.SetWorktrees(newMockWorktrees())
+	mgr.SetRunner(&mockRunner{})
+
+	sess, err := mgr.Spawn("owner/repo", 42, "issue", "", "claude", "", "")
+	if err != nil {
+		t.Fatalf("Spawn failed: %v", err)
+	}
+
+	mgr.Stop(sess.ID)
+	time.Sleep(50 * time.Millisecond)
+
+	mu.Lock()
+	countBefore := len(statusUpdates)
+	mu.Unlock()
+
+	mgr.Remove(sess.ID)
+	time.Sleep(50 * time.Millisecond)
+
+	mu.Lock()
+	defer mu.Unlock()
+	if len(statusUpdates) <= countBefore {
+		t.Error("expected status callback after Remove")
+	}
+	last := statusUpdates[len(statusUpdates)-1]
+	if last.Status != StatusRemoved {
+		t.Errorf("last status = %q, want %q", last.Status, StatusRemoved)
+	}
+}
+
 func TestManager_WorktreeExists(t *testing.T) {
 	mgr, _ := testManager(t)
 

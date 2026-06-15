@@ -166,6 +166,21 @@ func stopSessionCmd(conn protocol.Conn, sessionID string) tea.Cmd {
 	}
 }
 
+func removeSessionCmd(conn protocol.Conn, sessionID string) tea.Cmd {
+	return func() tea.Msg {
+		resp, err := protocol.SendRequest(conn, protocol.MsgSessionRemove, "dash-remove", protocol.SessionIDPayload{
+			SessionID: sessionID,
+		}, protocol.DefaultTimeout)
+		if err != nil {
+			return tui.ErrMsg{Err: err}
+		}
+		if resp.Type == protocol.MsgError {
+			return statusMsg{text: "Error: " + protocol.ParseErrorPayload(resp)}
+		}
+		return sessionRemovedMsg{sessionID: sessionID}
+	}
+}
+
 func attachSessionCmd(conn protocol.Conn, sessionID string) tea.Cmd {
 	return func() tea.Msg {
 		resp, err := protocol.SendRequest(conn, protocol.MsgSessionAttach, "dash-attach", protocol.SessionIDPayload{

@@ -40,6 +40,10 @@ type sessionStoppedMsg struct {
 	sessionID string
 }
 
+type sessionRemovedMsg struct {
+	sessionID string
+}
+
 type statusMsg struct {
 	text string
 }

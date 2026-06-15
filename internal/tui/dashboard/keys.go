@@ -343,6 +343,34 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			}
 		}
 		return m, nil
+	case msg.Code == 'x':
+		if m.activeTab == tabSessions {
+			if m.sessionCursor >= 0 && m.sessionCursor < len(m.sessions) {
+				sess := m.sessions[m.sessionCursor]
+				if sess.Status == "completed" || sess.Status == "failed" || sess.Status == "stopped" {
+					return m, removeSessionCmd(m.conn, sess.ID)
+				}
+			}
+		} else if m.activeTab == tabJira {
+			item := m.selectedJiraItem()
+			if item != nil {
+				for _, sess := range m.sessions {
+					if sess.ItemKey == item.Key && (sess.Status == "completed" || sess.Status == "failed" || sess.Status == "stopped") {
+						return m, removeSessionCmd(m.conn, sess.ID)
+					}
+				}
+			}
+		} else {
+			item := m.selectedItem()
+			if item != nil {
+				for _, sess := range m.sessions {
+					if sess.Repo == item.Repo.String() && sess.Number == item.Number && (sess.Status == "completed" || sess.Status == "failed" || sess.Status == "stopped") {
+						return m, removeSessionCmd(m.conn, sess.ID)
+					}
+				}
+			}
+		}
+		return m, nil
 	case msg.Code == 'n':
 		if m.activeTab == tabSessions && m.sessionCursor >= 0 && m.sessionCursor < len(m.sessions) {
 			sess := m.sessions[m.sessionCursor]

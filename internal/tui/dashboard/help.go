@@ -67,6 +67,7 @@ func (m Model) renderHelp() tea.View {
 		{"Enter", "Attach to session"},
 		{"n", "Rename session"},
 		{"s", "Stop session"},
+		{"x", "Remove session"},
 	})
 
 	section("Attached View", [][2]string{

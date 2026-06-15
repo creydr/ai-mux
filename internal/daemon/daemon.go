@@ -251,6 +251,8 @@ func (d *Daemon) handleMessage(cc *clientConn, msg protocol.Message) {
 		d.handleSessionTypeInput(cc, msg)
 	case protocol.MsgSessionRename:
 		d.handleSessionRename(cc, msg)
+	case protocol.MsgSessionRemove:
+		d.handleSessionRemove(cc, msg)
 	case protocol.MsgListJiraItems:
 		d.handleListJiraItems(cc, msg)
 	case protocol.MsgGetJiraItem:
@@ -474,6 +476,30 @@ func (d *Daemon) handleSessionStop(cc *clientConn, msg protocol.Message) {
 	}
 
 	resp, _ := protocol.NewResponse(msg.ID, map[string]string{"status": "stopped"})
+	cc.send(resp)
+}
+
+func (d *Daemon) handleSessionRemove(cc *clientConn, msg protocol.Message) {
+	if d.sessionMgr == nil {
+		resp, _ := protocol.NewError(msg.ID, "no agents configured")
+		cc.send(resp)
+		return
+	}
+
+	payload, err := protocol.ParsePayload[protocol.SessionIDPayload](msg)
+	if err != nil {
+		resp, _ := protocol.NewError(msg.ID, err.Error())
+		cc.send(resp)
+		return
+	}
+
+	if err := d.sessionMgr.Remove(payload.SessionID); err != nil {
+		resp, _ := protocol.NewError(msg.ID, err.Error())
+		cc.send(resp)
+		return
+	}
+
+	resp, _ := protocol.NewResponse(msg.ID, map[string]string{"status": "removed"})
 	cc.send(resp)
 }
 

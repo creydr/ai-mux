@@ -58,7 +58,7 @@ func (m *Model) handleEvent(ev event.Event) {
 
 func (m *Model) handleSessionEvent(sess protocol.SessionPayload) {
 	switch sess.Status {
-	case "completed", "failed", "stopped":
+	case "completed", "failed", "stopped", "removed":
 		for i, s := range m.sessions {
 			if s.ID == sess.ID {
 				m.sessions = append(m.sessions[:i], m.sessions[i+1:]...)
@@ -123,7 +123,17 @@ func (m Model) statusBarText() string {
 	}
 	switch m.activeTab {
 	case tabSessions:
-		return "enter: attach | n: rename | s: stop | tab: switch | ?: help"
+		bar := "enter: attach | n: rename"
+		if m.sessionCursor >= 0 && m.sessionCursor < len(m.sessions) {
+			sess := m.sessions[m.sessionCursor]
+			if sess.Status == "running" || sess.Status == "pending" {
+				bar += " | s: stop"
+			} else {
+				bar += " | x: remove"
+			}
+		}
+		bar += " | tab: switch | ?: help"
+		return bar
 	case tabJira:
 		bar := "a: spawn agent"
 		if item := m.selectedJiraItem(); item != nil {

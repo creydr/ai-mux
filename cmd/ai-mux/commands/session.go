@@ -44,10 +44,18 @@ var sessionRenameCmd = &cobra.Command{
 	RunE:  runSessionRename,
 }
 
+var sessionRemoveCmd = &cobra.Command{
+	Use:   "remove <session-id>",
+	Short: "Remove a completed session",
+	Args:  cobra.ExactArgs(1),
+	RunE:  runSessionRemove,
+}
+
 func init() {
 	sessionCmd.AddCommand(sessionListCmd)
 	sessionCmd.AddCommand(sessionAttachCmd)
 	sessionCmd.AddCommand(sessionRenameCmd)
+	sessionCmd.AddCommand(sessionRemoveCmd)
 }
 
 func runSessionList(cmd *cobra.Command, args []string) error {
@@ -184,6 +192,35 @@ func runSessionRename(cmd *cobra.Command, args []string) error {
 	}
 
 	fmt.Fprintf(cmd.OutOrStdout(), "session %s renamed to %q\n", sessionID, name)
+	return nil
+}
+
+func runSessionRemove(cmd *cobra.Command, args []string) error {
+	sessionID := args[0]
+
+	cfg, err := loadConfig()
+	if err != nil {
+		return err
+	}
+
+	transport := jsonlines.NewTransport()
+	conn, err := transport.Dial(cfg.Daemon.Socket)
+	if err != nil {
+		return fmt.Errorf("connecting to daemon: %w (is the daemon running?)", err)
+	}
+	defer conn.Close()
+
+	resp, err := protocol.SendRequest(conn, protocol.MsgSessionRemove, "cli-remove", protocol.SessionIDPayload{
+		SessionID: sessionID,
+	}, protocol.DefaultTimeout)
+	if err != nil {
+		return err
+	}
+	if resp.Type == protocol.MsgError {
+		return fmt.Errorf("remove failed: %s", protocol.ParseErrorPayload(resp))
+	}
+
+	fmt.Fprintf(cmd.OutOrStdout(), "session %s removed\n", sessionID)
 	return nil
 }
 

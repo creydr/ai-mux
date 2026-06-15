@@ -353,6 +353,28 @@ func (m *Manager) Stop(sessionID string) error {
 	return nil
 }
 
+func (m *Manager) Remove(sessionID string) error {
+	m.mu.Lock()
+	sess, ok := m.sessions[sessionID]
+	if ok {
+		tmuxSession := sess.TmuxSession
+		m.stopMonitor(sessionID)
+		delete(m.sessions, sessionID)
+		m.mu.Unlock()
+
+		m.tmux.KillSession(tmuxSession)
+
+		sess.Status = StatusRemoved
+		m.notifyStatus(sess)
+		return nil
+	}
+	m.mu.Unlock()
+
+	removed := &Session{ID: sessionID, Status: StatusRemoved}
+	m.notifyStatus(removed)
+	return nil
+}
+
 func (m *Manager) List() []*Session {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
