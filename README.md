@@ -1,6 +1,8 @@
 # ai-mux
 
-A terminal-based tool for monitoring multiple GitHub repositories and Jira boards. Watches for new issues, PRs, and Jira items with actionable integrations — spawn AI agent sessions to fix issues or review PRs directly from the dashboard.
+A terminal-based tool for monitoring multiple GitHub repositories and Jira boards. Watches for new issues, PRs, and Jira items with actionable integrations - spawn AI agent sessions to fix issues or review PRs directly from the dashboard.
+
+![ai-mux dashboard](website/recordings/dashboard-overview.gif)
 
 ## Requirements
 
