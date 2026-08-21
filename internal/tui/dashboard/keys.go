@@ -202,7 +202,7 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			if m.repoCursor == 0 {
 				m.selectedRepo = ""
 			} else {
-				m.selectedRepo = m.repos[m.repoCursor-1]
+				m.selectedRepo = repoAtVisualIndex(m.repos, m.repoCursor)
 			}
 			m.cursor = 0
 			m.expanded = make(map[string]bool)

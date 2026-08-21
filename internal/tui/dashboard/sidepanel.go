@@ -39,6 +39,20 @@ func groupReposByOrg(repos []string) []orgGroup {
 	return groups
 }
 
+func repoAtVisualIndex(repos []string, idx int) string {
+	groups := groupReposByOrg(repos)
+	pos := 1
+	for _, g := range groups {
+		for _, name := range g.repos {
+			if pos == idx {
+				return g.org + "/" + name
+			}
+			pos++
+		}
+	}
+	return ""
+}
+
 func renderSidePanel(repos []string, repoCursor int, selectedRepo string, focused bool, height int) string {
 	borderColor := lipgloss.Color("#555555")
 	if focused {

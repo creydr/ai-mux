@@ -481,6 +481,35 @@ func TestModel_RepoSelection(t *testing.T) {
 	}
 }
 
+func TestModel_RepoSelectionMatchesVisualOrder(t *testing.T) {
+	m := New(nil, 3, nil, false, nil)
+	m.issues = []provider.Item{
+		{ID: "knative-extensions/eventing-kafka-broker/issues/1", Number: 1, Title: "Issue A", Type: provider.ItemTypeIssue, Repo: provider.RepoRef{Owner: "knative-extensions", Repo: "eventing-kafka-broker"}},
+		{ID: "knative/eventing/issues/1", Number: 1, Title: "Issue B", Type: provider.ItemTypeIssue, Repo: provider.RepoRef{Owner: "knative", Repo: "eventing"}},
+	}
+	m.updateRepoList()
+
+	m.focusPanel = panelRepos
+	m.repoCursor = 1
+
+	updated, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	m = updated.(Model)
+
+	if m.selectedRepo != "knative/eventing" {
+		t.Errorf("cursor 1 should select knative/eventing (first org alphabetically), got %q", m.selectedRepo)
+	}
+
+	m.focusPanel = panelRepos
+	m.repoCursor = 2
+
+	updated, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	m = updated.(Model)
+
+	if m.selectedRepo != "knative-extensions/eventing-kafka-broker" {
+		t.Errorf("cursor 2 should select knative-extensions/eventing-kafka-broker, got %q", m.selectedRepo)
+	}
+}
+
 func TestModel_RepoSelectionAll(t *testing.T) {
 	m := New(nil, 3, nil, false, nil)
 	m.issues = multiRepoItems(5)
