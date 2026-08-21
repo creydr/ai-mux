@@ -148,10 +148,10 @@ func runDaemonStart(cmd *cobra.Command, args []string) error {
 	return err
 }
 
-func startInBackground(cmd *cobra.Command) error {
+func startDaemonBackground() (int, error) {
 	exe, err := os.Executable()
 	if err != nil {
-		return fmt.Errorf("resolving executable: %w", err)
+		return 0, fmt.Errorf("resolving executable: %w", err)
 	}
 
 	childArgs := []string{"daemon", "start"}
@@ -166,11 +166,28 @@ func startInBackground(cmd *cobra.Command) error {
 	child.Stdin = nil
 
 	if err := child.Start(); err != nil {
-		return fmt.Errorf("starting background daemon: %w", err)
+		return 0, fmt.Errorf("starting background daemon: %w", err)
 	}
 
-	fmt.Fprintf(cmd.OutOrStdout(), "daemon started in background (pid %d)\n", child.Process.Pid)
+	return child.Process.Pid, nil
+}
+
+func startInBackground(cmd *cobra.Command) error {
+	pid, err := startDaemonBackground()
+	if err != nil {
+		return err
+	}
+
+	fmt.Fprintf(cmd.OutOrStdout(), "daemon started in background (pid %d)\n", pid)
 	return nil
+}
+
+func isDaemonRunning() bool {
+	pid, err := daemon.ReadPIDFile(pidFilePath())
+	if err != nil {
+		return false
+	}
+	return daemon.IsRunning(pid)
 }
 
 func runDaemonStop(cmd *cobra.Command, args []string) error {
