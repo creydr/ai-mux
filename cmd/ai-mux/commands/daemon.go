@@ -12,6 +12,8 @@ import (
 	"syscall"
 	"text/template"
 
+	"github.com/spf13/cobra"
+
 	"github.com/creydr/ai-mux/internal/config"
 	"github.com/creydr/ai-mux/internal/daemon"
 	"github.com/creydr/ai-mux/internal/depcheck"
@@ -19,7 +21,6 @@ import (
 	"github.com/creydr/ai-mux/internal/protocol/jsonlines"
 	"github.com/creydr/ai-mux/internal/provider/github"
 	"github.com/creydr/ai-mux/internal/store/jsonfile"
-	"github.com/spf13/cobra"
 )
 
 var background bool
@@ -180,14 +181,6 @@ func startInBackground(cmd *cobra.Command) error {
 
 	fmt.Fprintf(cmd.OutOrStdout(), "daemon started in background (pid %d)\n", pid)
 	return nil
-}
-
-func isDaemonRunning() bool {
-	pid, err := daemon.ReadPIDFile(pidFilePath())
-	if err != nil {
-		return false
-	}
-	return daemon.IsRunning(pid)
 }
 
 func runDaemonStop(cmd *cobra.Command, args []string) error {

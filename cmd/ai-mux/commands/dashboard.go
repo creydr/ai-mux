@@ -2,13 +2,16 @@ package commands
 
 import (
 	"fmt"
+	"os"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/spf13/cobra"
+
+	"github.com/creydr/ai-mux/internal/daemon"
 	"github.com/creydr/ai-mux/internal/protocol"
 	"github.com/creydr/ai-mux/internal/protocol/jsonlines"
 	"github.com/creydr/ai-mux/internal/tui/dashboard"
-	"github.com/spf13/cobra"
 )
 
 var dashboardCmd = &cobra.Command{
@@ -25,7 +28,12 @@ func runDashboard(cmd *cobra.Command, args []string) error {
 
 	transport := jsonlines.NewTransport()
 	conn, err := transport.Dial(cfg.Daemon.Socket)
-	if err != nil && !isDaemonRunning() {
+	if err != nil {
+		// Socket unreachable — clean up stale PID/socket so daemon start
+		// doesn't refuse due to a reused PID.
+		daemon.RemovePIDFile(pidFilePath())
+		os.Remove(cfg.Daemon.Socket)
+
 		pid, startErr := startDaemonBackground()
 		if startErr != nil {
 			return fmt.Errorf("daemon not running and failed to auto-start: %w", startErr)
@@ -33,9 +41,9 @@ func runDashboard(cmd *cobra.Command, args []string) error {
 		fmt.Fprintf(cmd.OutOrStdout(), "daemon auto-started (pid %d), connecting...\n", pid)
 
 		conn, err = waitForDaemon(transport, cfg.Daemon.Socket, 5*time.Second)
-	}
-	if err != nil {
-		return fmt.Errorf("connecting to daemon: %w", err)
+		if err != nil {
+			return fmt.Errorf("connecting to daemon: %w", err)
+		}
 	}
 	defer conn.Close()
 
