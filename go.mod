@@ -3,9 +3,9 @@ module github.com/creydr/ai-mux
 go 1.26.4
 
 require (
-	charm.land/bubbles/v2 v2.2.1
-	charm.land/bubbletea/v2 v2.1.1
-	charm.land/lipgloss/v2 v2.0.6
+	charm.land/bubbles/v2 v2.2.2
+	charm.land/bubbletea/v2 v2.1.2
+	charm.land/lipgloss/v2 v2.1.1
 	github.com/charmbracelet/glamour v1.0.0
 	github.com/google/go-github/v71 v71.0.0
 	github.com/spf13/cobra v1.10.2
@@ -33,12 +33,12 @@ require (
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/lucasb-eyer/go-colorful v1.4.1 // indirect
 	github.com/mattn/go-isatty v0.0.22 // indirect
-	github.com/mattn/go-runewidth v0.0.30 // indirect
+	github.com/mattn/go-runewidth v0.0.31 // indirect
 	github.com/microcosm-cc/bluemonday v1.0.27 // indirect
 	github.com/muesli/cancelreader v0.2.2 // indirect
 	github.com/muesli/reflow v0.3.0 // indirect
 	github.com/muesli/termenv v0.16.0 // indirect
-	github.com/rivo/uniseg v0.4.7 // indirect
+	github.com/rivo/uniseg v0.4.8-0.20261110175422-3a370411ca06 // indirect
 	github.com/spf13/pflag v1.0.10 // indirect
 	github.com/xo/terminfo v1.0.0 // indirect
 	github.com/yuin/goldmark v1.8.2 // indirect
