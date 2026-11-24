@@ -123,6 +123,84 @@ func TestManager_HasChanges_WithChanges(t *testing.T) {
 	}
 }
 
+func TestFilterGitInfoMessages(t *testing.T) {
+	tests := []struct {
+		name   string
+		input  string
+		expect string
+	}{
+		{
+			name:   "filters Previous HEAD position",
+			input:  "Previous HEAD position was cb0a3d27 fix(e2e): improve gateway test reliability (#572)\nfatal: could not read Username",
+			expect: "fatal: could not read Username",
+		},
+		{
+			name:   "filters Switched to",
+			input:  "Switched to branch 'main'\nfatal: some error",
+			expect: "fatal: some error",
+		},
+		{
+			name:   "filters HEAD is now at",
+			input:  "HEAD is now at abc1234 some commit\nerror: something broke",
+			expect: "error: something broke",
+		},
+		{
+			name:   "filters Already on",
+			input:  "Already on 'main'\nerror: failed",
+			expect: "error: failed",
+		},
+		{
+			name:   "returns empty when only info messages",
+			input:  "Previous HEAD position was abc1234 some commit\nSwitched to branch 'feature'",
+			expect: "",
+		},
+		{
+			name:   "preserves actual errors",
+			input:  "fatal: bad revision 'nonexistent'",
+			expect: "fatal: bad revision 'nonexistent'",
+		},
+		{
+			name:   "handles empty input",
+			input:  "",
+			expect: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := filterGitInfoMessages(tt.input)
+			if got != tt.expect {
+				t.Errorf("filterGitInfoMessages() = %q, want %q", got, tt.expect)
+			}
+		})
+	}
+}
+
+func TestIsOnBranch(t *testing.T) {
+	repo := initRepo(t)
+	mgr := NewManager()
+
+	// A normal worktree should be on a branch
+	wtPath, err := mgr.Create(repo, "branch-test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !isOnBranch(wtPath) {
+		t.Error("worktree created with Create should be on a branch")
+	}
+
+	// A detached worktree should not be on a branch
+	detachedPath := filepath.Join(repo, worktreeDir, "detached-test")
+	cmd := exec.Command("git", "worktree", "add", "--detach", detachedPath)
+	cmd.Dir = repo
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("creating detached worktree: %s: %v", out, err)
+	}
+	if isOnBranch(detachedPath) {
+		t.Error("detached worktree should not be on a branch")
+	}
+}
+
 func TestManager_Cleanup(t *testing.T) {
 	repo := initRepo(t)
 	mgr := NewManager()
