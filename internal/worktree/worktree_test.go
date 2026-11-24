@@ -176,31 +176,6 @@ func TestFilterGitInfoMessages(t *testing.T) {
 	}
 }
 
-func TestIsOnBranch(t *testing.T) {
-	repo := initRepo(t)
-	mgr := NewManager()
-
-	// A normal worktree should be on a branch
-	wtPath, err := mgr.Create(repo, "branch-test")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !isOnBranch(wtPath) {
-		t.Error("worktree created with Create should be on a branch")
-	}
-
-	// A detached worktree should not be on a branch
-	detachedPath := filepath.Join(repo, worktreeDir, "detached-test")
-	cmd := exec.Command("git", "worktree", "add", "--detach", detachedPath)
-	cmd.Dir = repo
-	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("creating detached worktree: %s: %v", out, err)
-	}
-	if isOnBranch(detachedPath) {
-		t.Error("detached worktree should not be on a branch")
-	}
-}
-
 func TestManager_Cleanup(t *testing.T) {
 	repo := initRepo(t)
 	mgr := NewManager()

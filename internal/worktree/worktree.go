@@ -78,15 +78,9 @@ func (m *Manager) CreateForPR(repoPath, name, repoFullName string, prNumber int)
 		ghCmd := exec.Command("gh", "pr", "checkout", prNum, "--repo", repoFullName)
 		ghCmd.Dir = wtPath
 		if out, err := ghCmd.CombinedOutput(); err != nil {
-			// gh pr checkout in a detached worktree may exit non-zero
-			// but still succeed (e.g. tracking setup fails after checkout).
-			if isOnBranch(wtPath) {
-				return wtPath, nil
-			}
-
 			outStr := strings.TrimSpace(string(out))
-			if strings.Contains(outStr, "already used by worktree") || strings.Contains(outStr, "already exists") || strings.Contains(outStr, "refusing to fetch") {
-				// Branch is checked out elsewhere — retry in detached mode then create a local branch
+			if strings.Contains(outStr, "already used by worktree") || strings.Contains(outStr, "already exists") || strings.Contains(outStr, "refusing to fetch") || strings.Contains(outStr, "Not possible to fast-forward") {
+				// Branch conflict or stale local branch — retry in detached mode then create a local branch
 				ghRetry := exec.Command("gh", "pr", "checkout", prNum, "--repo", repoFullName, "--detach")
 				ghRetry.Dir = wtPath
 				if out2, err2 := ghRetry.CombinedOutput(); err2 != nil {
@@ -118,15 +112,6 @@ func (m *Manager) CreateForPR(repoPath, name, repoFullName string, prNumber int)
 
 		return wtPath, nil
 	}
-}
-
-// isOnBranch returns true if the directory is a git checkout on a named
-// branch (not detached HEAD).
-func isOnBranch(dir string) bool {
-	cmd := exec.Command("git", "symbolic-ref", "--short", "HEAD")
-	cmd.Dir = dir
-	out, err := cmd.Output()
-	return err == nil && strings.TrimSpace(string(out)) != ""
 }
 
 // filterGitInfoMessages strips informational git status lines from
